@@ -1,7 +1,7 @@
-class Student {
+export class Student {
     fullName: string;
 
-    constructor(public firstName, public middleInitial, public lastName) {
+    constructor(public firstName: string, public middleInitial: string, public lastName: string) {
         this.fullName = firstName + " " + middleInitial + " " + lastName;
     }
 
@@ -12,10 +12,10 @@ interface Person {
     lastName: string;
 }
 
-function greeter(person : Person) {
+export function greeter(person : Person) {
     return "Hello, " + person.firstName + " " + person.lastName;
 }
 
-var user = new Student("Jane", "M.", "User");
+// var user = new Student("Jane", "M.", "User");
 
-document.body.innerHTML = greeter(user);
+// document.body.innerHTML = greeter(user);
