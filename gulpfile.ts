@@ -1,17 +1,25 @@
-var gulp = require('gulp');
-var concat = require('gulp-concat');
-var ts = require('gulp-typescript');
-var clean = require('gulp-clean');
-var runSequence = require('run-sequence');
-var browserSync = require('browser-sync').create();
+import * as del from 'del';
 
-var browserify = require("browserify");
-var source = require('vinyl-source-stream');
-var tsify = require("tsify");
+import * as gulp from 'gulp';
+import * as concat from 'gulp-concat';
+import * as ts from 'gulp-typescript';
+import * as uglify from 'gulp-uglify';
+
+import * as runSequence from 'run-sequence';
+import * as browserify from 'browserify';
+import * as buffer from 'vinyl-buffer';
+import * as source from 'vinyl-source-stream';
+
+const browserSync = require('browser-sync').create();
+const tsify = require('tsify');
+
 
 gulp.task('default', ['build-fresh']);
 
-gulp.task('html-copy', function() {
+/**
+ * Task for html copy
+ */
+gulp.task('html-copy', () => {
     return gulp.src('src/**/*.html')
         .pipe(gulp.dest('dist'))
         .pipe(browserSync.reload({
@@ -19,7 +27,10 @@ gulp.task('html-copy', function() {
         }))
 });
 
-gulp.task('assets-copy', function() {
+/**
+ * Task for assets copy
+ */
+gulp.task('assets-copy', () => {
     return gulp.src('src/assets/**/*.*')
         .pipe(gulp.dest('dist/assets'))
         .pipe(browserSync.reload({
@@ -27,44 +38,56 @@ gulp.task('assets-copy', function() {
         }))
 });
 
-gulp.task('ts-copy', function() {
+/**
+ * Task for ts compiling and compressing
+ */
+gulp.task('ts-copy', () => {
     return browserify({
-        basedir: '.',
+        basedir: __dirname,
         debug: true,
-        entries: ['src/index.ts'],
+        entries: [
+            'src/app.ts',
+            'src/objects/index.ts',
+        ],
         cache: {},
         packageCache: {}
     })
     .plugin(tsify)
     .bundle()
-    .on('error', function(err: any) {
+    .on('error', (err: Error) => {
         console.log('\nError: ', err.name);
         console.log(err.message);
     })
     .pipe(source('bundle.js'))
+    .pipe(buffer())
+    .pipe(uglify())
     .pipe(gulp.dest('dist'));
 });
 
-gulp.task('browserSync', function() {
+/**
+ * Task for browser live reload
+ */
+gulp.task('browserSync', () => {
     browserSync.init({
+        ui: false,
         notify: false,
-        // server: {
-            // baseDir: 'dist'
-        // },
+        open: true,
         proxy: "127.0.0.1:9000"
     });
 });
 
-gulp.task('clean', function (){
-    return gulp.src('dist/*')
-        .pipe(clean());
+/**
+ * Task for clean dist/
+ */
+gulp.task('clean', () => {
+    return del(['dist/*']);
 });
 
-gulp.task('build-fresh', function () {
+gulp.task('build-fresh', () => {
     runSequence('clean', 'html-copy', 'assets-copy', 'ts-copy', 'watch');
 });
 
-gulp.task('watch', ['browserSync', 'html-copy', 'assets-copy', 'ts-copy'], function() {
+gulp.task('watch', ['browserSync', 'html-copy', 'assets-copy', 'ts-copy'], () => {
     gulp.watch('src/assets/**/*.*', ['assets-copy']);
     gulp.watch('src/**/*.html', ['html-copy', 'ts-copy']);
     gulp.watch('src/**/*.ts', ['html-copy', 'ts-copy']);
