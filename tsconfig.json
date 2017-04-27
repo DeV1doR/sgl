@@ -1,0 +1,16 @@
+{
+    "files": [
+        "src/greeter.ts"
+    ],
+    "compilerOptions": {
+        "noImplicitAny": true,
+        "alwaysStrict": true,
+        "experimentalDecorators": true,
+        "target": "es5",
+        "out": "output.js",
+        "outDir": "dist"
+    },
+    "exclude": [
+        "node_modules"
+    ]
+}
