@@ -1,17 +1,19 @@
 interface Person {
     firstName: string;
+    middleInitial: string;
     lastName: string;
+    greet(): string;
 }
 
-export class Student {
+export class Student implements Person {
     fullName: string;
 
     constructor(public firstName: string, public middleInitial: string, public lastName: string) {
         this.fullName = firstName + " " + middleInitial + " " + lastName;
     }
 
-    static greeter(person : Person): string {
-        return "Hello, " + person.firstName + " " + person.lastName;
+    public greet(): string {
+        return `Hello, ${this.firstName} ${this.lastName}`;
     }
 
 }

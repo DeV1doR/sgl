@@ -30,11 +30,12 @@ class Server {
         res.sendFile(path.join(__dirname + '/src/index.html'));
     }
 
-    public listen(port: number): void {
-        console.log(`Listening at :${port}/`);
-        this.express.listen(port);
+    static listen(port: number): void {
+        let server: Server = new Server();
+        server.express.listen(port, () => {
+            console.log(`Listening at :${port}/`);
+        });
     }
 }
 
-const server: Server = new Server();
-server.listen(port);
+Server.listen(port);

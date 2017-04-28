@@ -3,18 +3,19 @@ import * as del from 'del';
 import * as gulp from 'gulp';
 import * as concat from 'gulp-concat';
 import * as ts from 'gulp-typescript';
+import * as gulpif from 'gulp-if';
 import * as uglify from 'gulp-uglify';
 
 import * as runSequence from 'run-sequence';
 import * as browserify from 'browserify';
 import * as buffer from 'vinyl-buffer';
 import * as source from 'vinyl-source-stream';
+import * as bs from 'browser-sync';
 
-const browserSync = require('browser-sync').create();
 const tsify = require('tsify');
 
-
-gulp.task('default', ['build-fresh']);
+const browserSync: bs.BrowserSyncInstance = bs.create();
+const isProduction: boolean = <boolean>process.env.production || false;
 
 /**
  * Task for html copy
@@ -60,8 +61,11 @@ gulp.task('ts-copy', () => {
     })
     .pipe(source('bundle.js'))
     .pipe(buffer())
-    .pipe(uglify())
-    .pipe(gulp.dest('dist'));
+    .pipe(gulpif(isProduction, uglify()))
+    .pipe(gulp.dest('dist'))
+    .pipe(browserSync.reload({
+        stream: true
+    }));
 });
 
 /**
@@ -82,6 +86,8 @@ gulp.task('browserSync', () => {
 gulp.task('clean', () => {
     return del(['dist/*']);
 });
+
+gulp.task('default', ['build-fresh']);
 
 gulp.task('build-fresh', () => {
     runSequence('clean', 'html-copy', 'assets-copy', 'ts-copy', 'watch');
