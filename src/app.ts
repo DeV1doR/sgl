@@ -1,75 +1,34 @@
-import * as PIXI from 'pixi.js';
+import * as PIXI from "pixi.js";
 
-interface IKeyboad {
-    code: number;
-    isDown: boolean;
-    isUp: boolean;
-    downHandler?: (e: KeyboardEvent) => void;
-    upHandler?: (e: KeyboardEvent) => void;
-}
-
-function createBox(): PIXI.Graphics {
-    let graphics = new PIXI.Graphics();
-    graphics.beginFill(0xFFFF00);
-    graphics.lineStyle(1, 0xFF0000);
-    graphics.drawRect(0, 0, 20, 20);
-    return graphics;
-}
-
-const createKey = (keyCode: number): IKeyboad => {
-    let key: IKeyboad = {
-        code: keyCode,
-        isDown: false,
-        isUp: true,
-    };
-    key.downHandler = (e) => {
-        if (e.keyCode === key.code) {
-            key.isDown = true;
-            key.isUp = false;
-        }
-    };
-    key.upHandler = (e) => {
-        if (e.keyCode === key.code) {
-            key.isDown = false;
-            key.isUp = true;
-        }
-    };
-    window.addEventListener("keydown", key.downHandler, true);
-    window.addEventListener("keyup", key.upHandler, true);
-    return key;
-}
-
-const keyboard = {
-    LEFT: createKey(37),
-    UP: createKey(38),
-    RIGHT: createKey(39),
-    DOWN: createKey(40)
-};
+import * as utils from "./utils";
 
 class Game {
 
-    static FPS = 60;
+    public static FPS = 60;
 
-    public renderer: PIXI.Application
+    public renderer: PIXI.Application;
 
-    public nextLoopTime: number
-    public deltaLoopTime: number
+    public nextLoopTime: number;
+    public deltaLoopTime: number;
+    public keyboard: utils.IKeyboad;
 
-    public gameElements: { [key: string]: PIXI.Graphics }
+    public gameElements: { [key: string]: PIXI.DisplayObject };
 
     constructor() {
         this.renderer = new PIXI.Application(800, 600, {
-            view: <HTMLCanvasElement>document.getElementById('container'),
             backgroundColor : 0x1099bb,
             legacy: true,
+            view: document.getElementById("sgl") as HTMLCanvasElement,
         }, true);
-        this.renderer.view.style.position = 'absolute';
-        this.renderer.view.style.left = '50%';
-        this.renderer.view.style.top = '50%';
-        this.renderer.view.style.transform = 'translate3d( -50%, -60%, 0 )';
 
         this.nextLoopTime = Date.now();
         this.gameElements = {};
+        this.keyboard = {
+            DOWN: utils.createKey(40),
+            LEFT: utils.createKey(37),
+            RIGHT: utils.createKey(39),
+            UP: utils.createKey(38),
+        };
 
         this.create();
 
@@ -77,45 +36,43 @@ class Game {
     }
 
     public get interval(): number {
-        return 1000 / <number>Game.FPS;
+        return 1000 / Game.FPS as number;
     }
 
     private create(): void {
-        this.gameElements["box"] = createBox();
-        this.renderer.stage.addChild(this.gameElements["box"]);
+        this.gameElements.box = utils.createBox();
+        this.renderer.stage.addChild(this.gameElements.box);
     }
 
     private update(): void {
         switch (true) {
-            case keyboard.RIGHT.isDown:
-                this.gameElements["box"].x += 5;
+            case this.keyboard.RIGHT.isDown:
+                this.gameElements.box.x += 5;
                 break;
-            case keyboard.LEFT.isDown:
-                this.gameElements["box"].x -= 5;
+            case this.keyboard.LEFT.isDown:
+                this.gameElements.box.x -= 5;
                 break;
-            case keyboard.UP.isDown:
-                this.gameElements["box"].y -= 5;
+            case this.keyboard.UP.isDown:
+                this.gameElements.box.y -= 5;
                 break;
-            case keyboard.DOWN.isDown:
-                this.gameElements["box"].y += 5;
+            case this.keyboard.DOWN.isDown:
+                this.gameElements.box.y += 5;
                 break;
         }
     }
 
-    public runGameLoop(): void {
+    private runGameLoop(): void {
         requestAnimationFrame(this.runGameLoop.bind(this));
-         
-        let now: number = Date.now();
-        this.deltaLoopTime = <number>now - <number>this.nextLoopTime;
 
-        console.log(1000/this.deltaLoopTime);
-         
+        const now: number = Date.now();
+        this.deltaLoopTime = now as number - this.nextLoopTime as number;
+
         if (this.deltaLoopTime > this.interval) {
-            this.nextLoopTime = <number>now - (<number>this.deltaLoopTime % <number>this.interval);
+            this.nextLoopTime = now as number - (this.deltaLoopTime as number % this.interval as number);
             this.update();
             this.renderer.render();
         }
     }
 }
 
-(<any>window).MainGame = new Game();
+(window as any).MainGame = new Game();

@@ -1,3 +1,5 @@
+import * as config from "./config";
+
 import * as del from 'del';
 
 import * as gulp from 'gulp';
@@ -15,7 +17,8 @@ import * as bs from 'browser-sync';
 const tsify = require('tsify');
 
 const browserSync: bs.BrowserSyncInstance = bs.create();
-const isProduction: boolean = <boolean>process.env.production || false;
+const env: string = process.env.NODE_ENV || "development";
+const isProduction: boolean = (env === "production") ? true : false;
 
 /**
  * Task for html copy
@@ -73,6 +76,7 @@ gulp.task('ts-copy', () => {
  */
 gulp.task('browserSync', () => {
     browserSync.init({
+        port: config[env].GULP_PORT,
         ui: false,
         notify: false,
         open: true,
@@ -95,6 +99,7 @@ gulp.task('build-fresh', () => {
 
 gulp.task('watch', ['browserSync', 'html-copy', 'assets-copy', 'ts-copy'], () => {
     gulp.watch('src/assets/**/*.*', ['assets-copy']);
-    gulp.watch('src/**/*.html', ['html-copy', 'ts-copy']);
+    gulp.watch('templates/**/*.html', ['html-copy', 'ts-copy']);
     gulp.watch('src/**/*.ts', ['html-copy', 'ts-copy']);
+    gulp.watch('config/**/*.ts', ['ts-copy']);
 });
