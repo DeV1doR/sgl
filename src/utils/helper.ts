@@ -6,15 +6,22 @@ export interface IKeyboad {
     upHandler?: (e: KeyboardEvent) => void;
 }
 
-export const createBox = (): PIXI.DisplayObject => {
+export const createBox = (x: number, y: number, width: number, height: number): PIXI.Container => {
     const graphics = new PIXI.Graphics();
     graphics.beginFill(0xFFFF00);
     graphics.lineStyle(1, 0xFF0000);
-    graphics.drawRect(0, 0, 20, 20);
+    graphics.drawRect(x, y, width, height);
 
     const container = new PIXI.Container();
     container.addChild(graphics);
     return container;
+};
+
+export const createText = (x: number, y: number, label: string): PIXI.Text => {
+    const text = new PIXI.Text(label);
+    text.x = x;
+    text.y = y;
+    return text;
 };
 
 export const createKey = (keyCode: number): IKeyboad => {

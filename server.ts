@@ -31,13 +31,21 @@ class Server {
 
         this.io.on("connect", (socket: any) => {
             console.log("Connected client on port %s.", socketPort);
-            socket.on("message", (m: any) => {
-                console.log(`[server](message): ${m}`);
-                this.io.emit("message", m);
+            socket.on("message", (data: any) => {
+                console.log(`[server](message): ${data}`);
+                this.io.emit("message", data);
             });
 
             socket.on("disconnect", () => {
                 console.log("Client disconnected");
+            });
+
+            socket.on("latency", (data: any) => {
+                if (!data) return;
+                socket.emit("latency", {
+                    timestamp: Date.now(),
+                    processed: data.timestamp,
+                });
             });
         });
     }

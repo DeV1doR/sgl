@@ -7,21 +7,23 @@ class Game {
 
     public static FPS = 60;
 
+    public canvas: HTMLCanvasElement;
     public renderer: PIXI.Application;
 
     public nextLoopTime: number;
     public deltaLoopTime: number;
     public keyboard:  { [key: string]: utils.IKeyboad };
 
-    public gameElements: { [key: string]: PIXI.DisplayObject };
+    public gameElements: { [key: string]: any };
 
     private io: any;
 
     constructor() {
+        this.canvas = document.getElementById("sgl") as HTMLCanvasElement;
         this.renderer = new PIXI.Application(800, 600, {
             backgroundColor : 0x1099bb,
             legacy: true,
-            view: document.getElementById("sgl") as HTMLCanvasElement,
+            view: this.canvas,
         }, true);
 
         this.nextLoopTime = Date.now();
@@ -36,30 +38,53 @@ class Game {
         this.createSocket();
 
         this.create();
-
         this.runGameLoop();
+
+        // let inputFPS = document.querySelector("#fps + button");
+        // let callback = (e: any) => {
+        //     console.log(e);
+        // };
+        // inputFPS.addEventListener("click", callback, false);
     }
 
     public get interval(): number {
         return 1000 / Game.FPS as number;
     }
 
+    public getLatency(): void {
+        this.io.emit("latency", {
+            timestamp: Date.now()
+        });
+    }
+
     private createSocket(): void {
         this.io = io("http://localhost:9001");
         this.io.on("connect", () => {
             console.log("open");
-            this.io.on("message", (data: any) => {
-                console.log(data);
-            });
-            this.io.on("disconnect", () => {
-                console.log("closed");
-            });
+        });
+        this.io.on("message", (data: any) => {
+            console.log(data);
+        });
+        this.io.on("latency", (data: any) => {
+            this.gameElements.latency.text = "Latency: " + (data.timestamp - data.processed).toString();
+        });
+        this.io.on("disconnect", () => {
+            console.log("closed");
         });
     }
 
     private create(): void {
-        this.gameElements.box = utils.createBox();
+        this.gameElements.box = utils.createBox(this.canvas.width / 2, this.canvas.height / 2, 20, 20);
         this.renderer.stage.addChild(this.gameElements.box);
+
+        this.gameElements.latency = utils.createText(0, 20, "Latency: 0");
+        this.gameElements.latency.x = this.canvas.width - this.gameElements.latency.width - 20;
+        this.renderer.stage.addChild(this.gameElements.latency);
+
+        setInterval(() => {
+            this.getLatency();
+        }, 500);
+
     }
 
     private update(): void {
