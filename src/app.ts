@@ -1,3 +1,4 @@
+import * as io from 'socket.io-client';
 import * as PIXI from "pixi.js";
 
 import * as utils from "./utils";
@@ -10,9 +11,11 @@ class Game {
 
     public nextLoopTime: number;
     public deltaLoopTime: number;
-    public keyboard: utils.IKeyboad;
+    public keyboard:  { [key: string]: utils.IKeyboad };
 
     public gameElements: { [key: string]: PIXI.DisplayObject };
+
+    private io: any;
 
     constructor() {
         this.renderer = new PIXI.Application(800, 600, {
@@ -30,6 +33,8 @@ class Game {
             UP: utils.createKey(38),
         };
 
+        this.createSocket();
+
         this.create();
 
         this.runGameLoop();
@@ -37,6 +42,19 @@ class Game {
 
     public get interval(): number {
         return 1000 / Game.FPS as number;
+    }
+
+    private createSocket(): void {
+        this.io = io("http://localhost:9001");
+        this.io.on("connect", () => {
+            console.log("open");
+            this.io.on("message", (data: any) => {
+                console.log(data);
+            });
+            this.io.on("disconnect", () => {
+                console.log("closed");
+            });
+        });
     }
 
     private create(): void {
