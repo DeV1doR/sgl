@@ -50,8 +50,7 @@ gulp.task('ts-copy', () => {
         basedir: __dirname,
         debug: true,
         entries: [
-            'src/app.ts',
-            'src/objects/index.ts',
+            'src/client.ts',
         ],
         cache: {},
         packageCache: {}
