@@ -1,10 +1,13 @@
-import * as config from "./config";
-
 import * as express from "express";
 import * as http from "http";
 import * as logger from "morgan";
 import * as path from "path";
 import * as io from "socket.io";
+
+import * as config from "./config";
+
+(global as any).window = (global as any).document = global;
+import { BaseCore, IPlayer, IInput, IVector, IMap, Direction, Vector, CreateBasePlayer } from "./src/engine";
 
 const env: string = process.env.NODE_ENV || "development";
 const settings: any = config[env];
@@ -12,11 +15,88 @@ const nodePort: number = process.env.PORT || settings.NODE_PORT;
 const socketPort: number = settings.SOCKET_PORT;
 const clientPort: number = settings.GULP_PORT;
 
+
+class ServerEngine extends BaseCore {
+
+    public uid: number;
+    public playersToUpdate: IPlayer[];
+    public players: {[id: string]: IPlayer};
+    private initTime: number;
+
+    constructor(public io: SocketIO.Server) {
+        super();
+        this.uid = 0;
+        this.playersToUpdate = [];
+        this.players = {};
+        this.initTime = 0.01;
+    }
+
+    public addPlayer(player: IPlayer): void {
+        this.uid += 1;
+        player.id = this.uid.toString();
+        this.players[this.uid] = player;
+    }
+
+    public removePlayer(player: IPlayer): void {
+        delete this.players[player.id];
+    }
+
+    public update(): void {
+        for (let player of this.playersToUpdate) {
+            player.prevPos = <IVector>player.pos.copy();
+            let vector: IVector = this.processInput(player);
+            player.pos.add(vector);
+            player.inputs = [];
+            //TODO: this.checkCollision(player);
+        }
+        this.playersToUpdate = [];
+        this.serverUpdate();
+    }
+
+    private processInput(player: IPlayer): IVector {
+        let vector: IVector = Vector.create({x: 0, y: 0} as IVector);
+        for (let input of player.inputs) {
+            //don't process ones we already have simulated locally
+            if (input.seq <= player.lastInputSeq)
+                continue;
+
+            switch (input.input) {
+                case Direction.Down:
+                    vector.y += 5;
+                    break;
+                case Direction.Left:
+                    vector.x -= 5;
+                    break;
+                case Direction.Right:
+                    vector.x += 5;
+                    break;                
+                case Direction.Up:
+                    vector.y -= 5;
+                    break;
+            }
+        }
+
+        if (player.inputs.length) {
+            player.lastInputTime = player.inputs[player.inputs.length - 1].time;
+            player.lastInputSeq = player.inputs[player.inputs.length - 1].seq;
+        }
+        return vector;
+    }
+
+    private serverUpdate(): void {
+        // send snapshot
+        this.io.emit("mapUpdate", <IMap>{
+            players: Object.keys(this.players).map((uid) => this.players[uid]),
+        });
+    }
+}
+
 class Server {
 
     public app: express.Application;
     private server: http.Server;
     private io: SocketIO.Server;
+    private gameEngine: ServerEngine;
 
     constructor() {
         this.createApp();
@@ -24,20 +104,33 @@ class Server {
         this.createSocket();
         this.middleware();
         this.routes();
+
+        this.createEngine();
     }
 
     public listen(): void {
+        console.log("Game loop started.");
+        this.gameEngine.runLoop();
         this.server.listen(nodePort, () => console.log(`Listening at :${nodePort}/`));
 
-        this.io.on("connect", (socket: any) => {
+        this.io.on("connect", (socket: SocketIO.Socket) => {
             console.log("Connected client on port %s.", socketPort);
+            let player: IPlayer = CreateBasePlayer();
+            // player.socket = socket;
+            this.gameEngine.addPlayer(player);
+
+            socket.emit("login", player);
+
             socket.on("message", (data: any) => {
                 console.log(`[server](message): ${data}`);
                 this.io.emit("message", data);
             });
 
             socket.on("disconnect", () => {
+                this.gameEngine.removePlayer(player);
                 console.log("Client disconnected");
+
+                socket.broadcast.emit("logout", player);
             });
 
             socket.on("latency", (data: any) => {
@@ -47,7 +140,18 @@ class Server {
                     processed: data.timestamp,
                 });
             });
+
+            socket.on("input", (input: IInput) => {
+                player.inputs.push(input);
+                this.gameEngine.playersToUpdate.push(player);
+                console.log(input);
+            })
         });
+    }
+
+    private createEngine(): void {
+        this.gameEngine = new ServerEngine(this.io);
+        this.gameEngine.showTickRate = false;
     }
 
     private createApp(): void {
