@@ -6,6 +6,7 @@ import * as io from "socket.io";
 
 import * as config from "./config";
 
+// hack for client code
 (global as any).window = (global as any).document = global;
 import { BaseCore, IPlayer, IInput, IVector, IMap, Direction, Vector, CreateBasePlayer } from "./src/engine";
 
@@ -14,6 +15,7 @@ const settings: any = config[env];
 const nodePort: number = process.env.PORT || settings.NODE_PORT;
 const socketPort: number = settings.SOCKET_PORT;
 const clientPort: number = settings.GULP_PORT;
+const allowedHosts = settings.ALLOWED_HOSTS.join(",") || "*";
 
 
 class ServerEngine extends BaseCore {
@@ -23,8 +25,8 @@ class ServerEngine extends BaseCore {
     public players: {[id: string]: IPlayer};
     private initTime: number;
 
-    constructor(public io: SocketIO.Server) {
-        super();
+    constructor(frameTime: number, public io: SocketIO.Server) {
+        super(frameTime);
         this.uid = 0;
         this.playersToUpdate = [];
         this.players = {};
@@ -44,12 +46,15 @@ class ServerEngine extends BaseCore {
     public update(): void {
         for (let player of this.playersToUpdate) {
             player.prevPos = <IVector>player.pos.copy();
+            // 1) Process input
             let vector: IVector = this.processInput(player);
             player.pos.add(vector);
             player.inputs = [];
-            //TODO: this.checkCollision(player);
+            // 2) Check collision
+            // TODO: this.checkCollision(player);
         }
         this.playersToUpdate = [];
+        // 3) Send update
         this.serverUpdate();
     }
 
@@ -59,20 +64,21 @@ class ServerEngine extends BaseCore {
             //don't process ones we already have simulated locally
             if (input.seq <= player.lastInputSeq)
                 continue;
-
-            switch (input.input) {
-                case Direction.Down:
-                    vector.y += 5;
-                    break;
-                case Direction.Left:
-                    vector.x -= 5;
-                    break;
-                case Direction.Right:
-                    vector.x += 5;
-                    break;                
-                case Direction.Up:
-                    vector.y -= 5;
-                    break;
+            for (let cmd of input.inputs) {
+                switch (cmd) {
+                    case Direction.Down:
+                        vector.y += player.speed.y;
+                        break;
+                    case Direction.Left:
+                        vector.x -= player.speed.x;
+                        break;
+                    case Direction.Right:
+                        vector.x += player.speed.x;
+                        break;                
+                    case Direction.Up:
+                        vector.y -= player.speed.y;
+                        break;
+                }
             }
         }
 
@@ -114,9 +120,8 @@ class Server {
         this.server.listen(nodePort, () => console.log(`Listening at :${nodePort}/`));
 
         this.io.on("connect", (socket: SocketIO.Socket) => {
-            console.log("Connected client on port %s.", socketPort);
+            console.log("Connected client on port %s.");
             let player: IPlayer = CreateBasePlayer();
-            // player.socket = socket;
             this.gameEngine.addPlayer(player);
 
             socket.emit("login", player);
@@ -130,7 +135,7 @@ class Server {
                 this.gameEngine.removePlayer(player);
                 console.log("Client disconnected");
 
-                socket.broadcast.emit("logout", player);
+                this.io.sockets.emit("logout", player);
             });
 
             socket.on("latency", (data: any) => {
@@ -144,13 +149,13 @@ class Server {
             socket.on("input", (input: IInput) => {
                 player.inputs.push(input);
                 this.gameEngine.playersToUpdate.push(player);
-                console.log(input);
+                console.log('Received input: ', input);
             })
         });
     }
 
     private createEngine(): void {
-        this.gameEngine = new ServerEngine(this.io);
+        this.gameEngine = new ServerEngine(30, this.io);
         this.gameEngine.showTickRate = false;
     }
 
@@ -165,7 +170,7 @@ class Server {
     private middleware(): void {
         this.app.use(logger("dev"));
         this.app.use((req: express.Request, res: express.Response, next: Function) => {
-            res.header('Access-Control-Allow-Origin', `http://localhost:${clientPort}`);
+            res.header('Access-Control-Allow-Origin', `${allowedHosts}`);
             res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS');
             res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization, Access-Control-Allow-Credentials");
             res.header("Access-Control-Allow-Credentials", "true");

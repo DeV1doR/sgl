@@ -1,18 +1,13 @@
 import * as PIXI from "pixi.js";
 
-if (typeof global === undefined) {
-    (window as any).frameTime = 60; // FPS
-} else {
-    (window as any).frameTime = 30; // TPS
-    (window as any).lastTime = 0;
-    window.requestAnimationFrame = window.requestAnimationFrame || ((callback: any) => {
-        let currTime: number = Date.now(),
-            timeToCall: number = Math.max(0, (window as any).frameTime - (currTime - (window as any).lastTime));
-        let id = window.setTimeout(() => callback(currTime + timeToCall), timeToCall);
-        (window as any).lastTime = currTime + timeToCall;
-        return id;
-    });
-}
+(window as any).lastTime = 0;
+window.requestAnimationFrame = window.requestAnimationFrame || ((callback: any) => {
+    let currTime: number = Date.now(),
+        timeToCall: number = Math.max(0, (window as any).frameTime - (currTime - (window as any).lastTime));
+    let id = window.setTimeout(() => callback(currTime + timeToCall), timeToCall);
+    (window as any).lastTime = currTime + timeToCall;
+    return id;
+});
 
 export interface IMap {
     players: IPlayer[];
@@ -21,7 +16,7 @@ export interface IMap {
 export interface IInput {
     seq: number;
     time: number;
-    input: Direction;
+    inputs: Direction[];
 }
 
 export interface IPlayer {
@@ -33,6 +28,7 @@ export interface IPlayer {
     inputs: IInput[];
     prevPos: IVector;
     pos: IVector;
+    speed: IVector;
 }
 
 export interface IVector {
@@ -56,6 +52,7 @@ export const CreateBasePlayer = (): IPlayer => {
         lastInputTime: 0,
         prevPos: Vector.create({x: 0, y: 0} as IVector),
         pos: Vector.create({x: 0, y: 0} as IVector),
+        speed: Vector.create({x: 3, y: 3} as IVector),
     };
 };
 
@@ -64,7 +61,7 @@ export class Vector implements IVector {
     constructor(public x: number, public y: number) {}
 
     public copy(): IVector {
-        return new Vector(this.x, this.y);
+        return Vector.create(this);
     }
 
     public add(v: IVector): void {
@@ -88,7 +85,7 @@ export abstract class BaseCore {
     private tickRate: number;
     private lastRun: number;
 
-    constructor() {
+    constructor(public frameTime: number) {
         this.nextLoopTime = Date.now();
         this.inputSeq = 0;
         this.lastRun = 0;
@@ -116,6 +113,6 @@ export abstract class BaseCore {
     public abstract update(): void;
 
     private get interval(): number {
-        return 1000 / (window as any).frameTime;
+        return 1000 / this.frameTime;
     }
 }

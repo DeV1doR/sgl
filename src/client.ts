@@ -17,8 +17,8 @@ class ClientGame extends BaseCore {
 
     private io: any;
 
-    constructor() {
-        super();
+    constructor(frameTime: number) {
+        super(frameTime);
         this.keyboard = {
             [Direction.Down]: createKey(40),
             [Direction.Left]: createKey(37),
@@ -36,6 +36,7 @@ class ClientGame extends BaseCore {
         this.players = {};
         this.gameElements = {};
         this.clientPredict = false;
+        this.showTickRate = false;
 
         this.createSocket();
         this.create();
@@ -43,17 +44,18 @@ class ClientGame extends BaseCore {
     }
 
     public update(): void {
-        // check syncs from server
+        // 1) check syncs from server
         // TODO: this.checkSyncs();
-        // process user input
+        // 2) process user input
         this.handleInput(this.player);
-        // send input to server
+        // 3) send input to server
         this.sendInputToServer();
-        // apply input localy
+        // 4) apply input localy
         if (this.clientPredict)
             this.updateLocalPosition();
-        //TODO: this.checkCollision();
-        // rerender map
+        // 5) Collision check
+        // TODO: this.checkCollision();
+        // 6) rerender map
         this.renderer.render();
     }
 
@@ -69,19 +71,18 @@ class ClientGame extends BaseCore {
 
     public handleInput(player: any): void {
         if (this.player === null) return;
-        let input: Direction;
+        let inputs: Direction[] = [];
         for (let direction in Object.keys(this.keyboard)) {
             if (this.keyboard[direction].isDown) {
-                input = parseInt(direction);
-                break;
+                inputs.push(parseInt(direction));
             }
         }
-        if (typeof input !== "undefined") {
+        if (inputs.length > 0) {
             this.inputSeq += 1;
             player.inputs.push({
                 seq: this.inputSeq,
                 time: Math.floor(Date.now() / 1000),
-                input: input,
+                inputs: inputs,
             } as IInput);
         }
     }
@@ -101,6 +102,10 @@ class ClientGame extends BaseCore {
     private createSocket(): void {
         this.io = io("http://localhost:9001");
         this.io.on("connect", () => {
+            Object.keys(this.players).forEach(uid => {
+                let player: IPlayer = this.players[uid];
+                this.removePlayer(player);
+            });
             console.log("open");
         });
         this.io.on("message", (data: any) => {
@@ -135,4 +140,4 @@ class ClientGame extends BaseCore {
     }
 }
 
-(window as any).MainGame = new ClientGame();
+(window as any).MainGame = new ClientGame(60);
