@@ -20,6 +20,11 @@ export interface IInput {
     entityId?: string;
 }
 
+export interface ILatency {
+    timestamp: number;
+    processed: number;
+}
+
 export interface IPlayer {
     id?: string;
     lastInputSeq: number;
@@ -35,8 +40,6 @@ export interface IPlayer {
 export interface IVector {
     x: number;
     y: number;
-    copy(): IVector;
-    add(v: IVector): void;
 }
 
 export const enum Direction {
@@ -51,9 +54,9 @@ export const CreateBasePlayer = (): IPlayer => {
         inputs: [],
         lastInputSeq: 0,
         lastInputTime: 0,
-        prevPos: Vector.create({x: 0, y: 0} as IVector),
-        pos: Vector.create({x: 0, y: 0} as IVector),
-        speed: Vector.create({x: 5, y: 5} as IVector),
+        prevPos: <IVector>{x: 0, y: 0},
+        pos: <IVector>{x: 0, y: 0},
+        speed: <IVector>{x: 5, y: 5},
     };
 };
 
@@ -61,17 +64,47 @@ export class Vector implements IVector {
 
     constructor(public x: number, public y: number) {}
 
-    public copy(): IVector {
-        return Vector.create(this);
+    public static copy(v: IVector): IVector {
+        return <IVector>{x: v.x, y: v.y};
     }
 
-    public add(v: IVector): void {
-        this.x = parseInt((this.x + v.x).toFixed());
-        this.y = parseInt((this.y + v.y).toFixed());
+    public static add(v1: IVector, v2: IVector): IVector {
+        return <IVector>{
+            x: parseInt((v1.x + v2.x).toFixed()),
+            y: parseInt((v1.y + v2.y).toFixed()),
+        }
+    }
+}
+
+class IMessageQueue<T> {
+    recvTs: number;
+    payload: T;
+}
+
+export class MessageQueue<T> {
+
+    public messages: IMessageQueue<T>[]
+
+    constructor(public timeDelay: number = 0) {
+        this.messages = [];
     }
 
-    public static create(v: IVector) {
-        return new Vector(v.x, v.y);
+    send(message: T): void {
+        this.messages.push({
+            recvTs: Date.now() + this.timeDelay,
+            payload: message,
+        });
+    }
+
+    recv(): T {
+        let now: number = Date.now();
+        for (let i in this.messages) {
+            let message = this.messages[i];
+            if (message.recvTs <= now) {
+                this.messages.splice(parseInt(i), 1);
+                return message.payload;
+            }
+        }
     }
 }
 
@@ -115,5 +148,34 @@ export abstract class BaseCore {
 
     private get interval(): number {
         return 1000 / this.frameTime;
+    }
+
+    public applyInput(player: IPlayer, input: IInput): void {
+        let vector: IVector = {x: 0, y: 0};
+        //don't process ones we already have simulated locally
+        if (input.seq > player.lastInputSeq) {
+            for (let cmd of input.inputs) {
+                switch (cmd) {
+                    case Direction.Down:
+                        vector.y += player.speed.y;
+                        break;
+                    case Direction.Left:
+                        vector.x -= player.speed.x;
+                        break;
+                    case Direction.Right:
+                        vector.x += player.speed.x;
+                        break;                
+                    case Direction.Up:
+                        vector.y -= player.speed.y;
+                        break;
+                }
+            }
+        }
+        if (!player.pos) {
+            player.pos = vector;
+        }
+        player.prevPos = Vector.copy(player.pos);
+        player.pos = Vector.add(player.pos, vector);
+        // this._checkCollision(player);
     }
 }

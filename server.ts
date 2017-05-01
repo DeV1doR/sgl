@@ -8,7 +8,7 @@ import * as config from "./config";
 
 // hack for client code
 (global as any).window = (global as any).document = global;
-import { BaseCore, IPlayer, IInput, IVector, ISnapshot, Direction, Vector, CreateBasePlayer } from "./src/engine";
+import { BaseCore, IPlayer, IInput, ILatency, IVector, ISnapshot, Direction, Vector, CreateBasePlayer, MessageQueue } from "./src/engine";
 
 const env: string = process.env.NODE_ENV || "development";
 const settings: any = config[env];
@@ -23,14 +23,14 @@ class ServerEngine extends BaseCore {
     public io: any;
 
     public uid: number;
-    public messages: IInput[];
+    public queue: MessageQueue<IInput>;
     public players: {[id: string]: IPlayer};
     private initTime: number;
 
     constructor(frameTime: number) {
         super(frameTime);
         this.uid = 0;
-        this.messages = [];
+        this.queue = new MessageQueue<IInput>();
         this.players = {};
         this.initTime = 0.01;
     }
@@ -65,50 +65,25 @@ class ServerEngine extends BaseCore {
 
     public processInputs(): void {
         while (true) {
-            let input: IInput = this.messages.pop();
+            let input: IInput = this.queue.recv();
             if (!input) {
                 break;
             }
-            if (this._validateInput(input)) {
+            console.log(input);
+            if (this.validateInput(input)) {
                 let id: string = input.entityId;
-                this.applyInput(this.players[id], input);
-            }
-        }
-    }
-
-    private _validateInput(input: IInput): boolean {
-        return true;
-    }
-
-    private applyInput(player: IPlayer, input: IInput): void {
-        player.prevPos = player.pos.copy();
-
-        let vector: IVector = Vector.create({x: 0, y: 0} as IVector);
-        
-        //don't process ones we already have simulated locally
-        if (input.seq > player.lastInputSeq) {
-            for (let cmd of input.inputs) {
-                switch (cmd) {
-                    case Direction.Down:
-                        vector.y += player.speed.y;
-                        break;
-                    case Direction.Left:
-                        vector.x -= player.speed.x;
-                        break;
-                    case Direction.Right:
-                        vector.x += player.speed.x;
-                        break;                
-                    case Direction.Up:
-                        vector.y -= player.speed.y;
-                        break;
+                let player: IPlayer = this.players[id];
+                if (player) {
+                    this.applyInput(player, input);
+                    player.lastInputTime = input.time;
+                    player.lastInputSeq = input.seq;
                 }
             }
         }
-        player.lastInputTime = input.time;
-        player.lastInputSeq = input.seq;
+    }
 
-        player.pos.add(vector);
-        // this._checkCollision(player);
+    public validateInput(input: IInput): boolean {
+        return true;
     }
 }
 
@@ -135,7 +110,7 @@ class Server {
         this.server.listen(nodePort, () => console.log(`Listening at :${nodePort}/`));
 
         this.io.on("connect", (socket: SocketIO.Socket) => {
-            console.log("Connected client on port %s.");
+            console.log("Connected client on port %s.", socketPort);
             let player: IPlayer = CreateBasePlayer();
             this.gameEngine.addPlayer(player);
 
@@ -144,6 +119,14 @@ class Server {
             socket.on("message", (data: any) => {
                 console.log(`[server](message): ${data}`);
                 this.io.emit("message", data);
+            });
+
+            socket.on("latency", (data: ILatency) => {
+                let resp: ILatency = {
+                    timestamp: Date.now() + 250,
+                    processed: data.timestamp,
+                };
+                socket.emit("latency", resp);
             });
 
             socket.on("disconnect", () => {
@@ -155,13 +138,13 @@ class Server {
 
             socket.on("input", (input: IInput) => {
                 input.entityId = player.id;
-                this.gameEngine.messages.push(input);
+                this.gameEngine.queue.send(input);
             })
         });
     }
 
     private createEngine(): void {
-        this.gameEngine = new ServerEngine(10);
+        this.gameEngine = new ServerEngine(30);
         this.gameEngine.setSocket(this.io);
         this.gameEngine.showTickRate = false;
     }

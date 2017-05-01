@@ -1,7 +1,7 @@
 import * as PIXI from "pixi.js";
 import * as io from "socket.io-client";
 
-import { BaseCore, IPlayer, IInput, ISnapshot, Direction, CreateBasePlayer } from "./engine";
+import { BaseCore, IPlayer, IInput, ILatency, ISnapshot, Direction, CreateBasePlayer, MessageQueue } from "./engine";
 import { IKeyboad, createBox, createKey } from "./utils";
 
 class ClientGame extends BaseCore {
@@ -9,13 +9,14 @@ class ClientGame extends BaseCore {
     public canvas: HTMLCanvasElement;
     public renderer: PIXI.Application;
 
+    public queue: MessageQueue<ISnapshot>;
     public player: IPlayer;
     public players: {[id: string]: IPlayer};
     public clientPredict: boolean;
     public gameElements: { [key: string]: any };
-    public messages: ISnapshot[];
     public keyboard:  { [direction: number]: IKeyboad };
 
+    private latencyBlock: HTMLElement;
     private io: any;
 
     constructor(frameTime: number) {
@@ -36,13 +37,21 @@ class ClientGame extends BaseCore {
         this.player = null;
         this.players = {};
         this.gameElements = {};
-        this.messages = [];
-        this.clientPredict = false;
+        this.clientPredict = true;
         this.showTickRate = false;
+        this.queue = new MessageQueue<ISnapshot>();
+        this.latencyBlock = document.getElementById("latency");
 
         this.createSocket();
         this.create();
         this.runLoop();
+        this.checkLatency();
+    }
+
+    public checkLatency(): void {
+        setInterval(() => {
+            this.io.emit("latency", <ILatency>{timestamp: Date.now()});
+        }, 1000);
     }
 
     public update(): void {
@@ -50,16 +59,23 @@ class ClientGame extends BaseCore {
         // 1) check syncs from server
         this.processServerMessages();
         // 2) process user input and send input to server
-        this.handleInput(this.player);
-        // 3) apply input localy
-        this.updateLocalPosition();
-        // 4) rerender map
-        this.renderer.render();
+        this.handleInputs();
+        // 3) rerender map
+        this.render();
+    }
+
+    public render(): void {
+        Object.keys(this.players).forEach(uid => {
+            let player: IPlayer = this.players[uid];
+            player.canvasEl.x = player.pos.x;
+            player.canvasEl.y = player.pos.y;
+        });
+        this.renderer.render();      
     }
 
     public processServerMessages(): void {
         while (true) {
-            let snapshot: ISnapshot = this.messages.pop();
+            let snapshot: ISnapshot = this.queue.recv();
             if (!snapshot) {
                 break;
             }
@@ -67,9 +83,24 @@ class ClientGame extends BaseCore {
                 if (this.players.hasOwnProperty(playerData.id)) {
                     let player: IPlayer = this.players[playerData.id];
                     player.pos = playerData.pos;
-                    player.canvasEl.x = player.pos.x;
-                    player.canvasEl.y = player.pos.y;
-                    player.inputs = [];
+
+                    if (this.clientPredict) {
+                        let i: number = 0;
+                        while (i < player.inputs.length) {
+                            let input: IInput = player.inputs[i];
+                            // if already processed from server, remove input
+                            if (input.seq <= playerData.lastInputSeq) {
+                                player.inputs.splice(i, 1);
+                            // reapply it, don't wait server response
+                            } else {
+                                this.applyInput(player, input);
+                                i++;
+                            }
+                        }
+                    } else {
+                        // no prediction, wait for server
+                        player.inputs = [];
+                    }
                 } else {
                     this.createPlayer(playerData);
                 }
@@ -77,19 +108,7 @@ class ClientGame extends BaseCore {
         }
     }
 
-    public sendInputToServer(): void {
-        if (this.player === null) return;
-        let last: IInput = this.player.inputs.pop();
-        if (typeof last !== "undefined")
-            this.io.emit("input", last);
-    }
-
-    public updateLocalPosition(): void {
-        if (!this.clientPredict) return;
-        // this.checkCollision();
-    }
-
-    public handleInput(player: any): void {
+    public handleInputs(): void {
         let inputs: Direction[] = [];
         for (let direction in Object.keys(this.keyboard)) {
             if (this.keyboard[direction].isDown) {
@@ -104,9 +123,17 @@ class ClientGame extends BaseCore {
                 inputs: inputs,
             };
             // store for reapplying
-            player.inputs.push(packet);
+            this.player.inputs.push(packet);
             // send packet to server
-            this.io.emit("input", packet);
+            setTimeout(() => {
+                this.io.emit("input", packet);
+            }, 1000);
+            // apply local change
+            if (this.clientPredict) {
+                this.applyInput(this.player, packet);
+                this.player.canvasEl.x = this.player.pos.x;
+                this.player.canvasEl.y = this.player.pos.y;
+            }
         }
     }
 
@@ -141,7 +168,11 @@ class ClientGame extends BaseCore {
             this.removePlayer(player);
         });
         this.io.on("mapUpdate", (snapshot: ISnapshot) => {
-            this.messages.push(snapshot);
+            this.queue.send(snapshot);
+        });
+        this.io.on("latency", (data: any) => {
+            let delta: number = data.timestamp - data.processed;
+            this.latencyBlock.innerHTML = `Latency: ${delta}`;
         });
         this.io.on("disconnect", () => {
             console.log("closed");
