@@ -36,10 +36,10 @@ class ClientGame extends BaseCore {
         }, true);
 
         this.player = null;
-        this.timeDelay = 0;
+        this.timeDelay = 1000;
         this.players = {};
         this.gameElements = {};
-        this.clientPredict = true;
+        this.clientPredict = false;
         this.showTickRate = false;
         this.queue = new MessageQueue<ISnapshot>();
         this.latencyBlock = document.getElementById("latency");
@@ -48,12 +48,14 @@ class ClientGame extends BaseCore {
         this.create();
         this.runLoop();
         this.checkLatency();
+        this.panelEvents();
+    }
 
+    public panelEvents(): void {
         let nodes: NodeList = document.querySelectorAll(".number-spinner button");
         for (let i = 0; i < nodes.length; i++) {
             let node: Node = nodes[i];
             let callback = (event: any) => {
-                event.preventDefault();
                 let input: any = event.target.closest(".number-spinner").querySelector("input");
                 let data: any = (node as any).dataset;
                 let oldValue: number = parseInt(input.value.trim());
@@ -101,6 +103,12 @@ class ClientGame extends BaseCore {
                 console.log(value);
             });
         }
+        document.querySelector("#interpolation").addEventListener("click", (event: any) => {
+            this.clientPredict = (this.clientPredict) ? false: true;
+        });
+        document.querySelector("#extrapolation").addEventListener("click", (event: any) => {
+            // TODO
+        });
     }
 
     public checkLatency(): void {
@@ -171,9 +179,7 @@ class ClientGame extends BaseCore {
             // store for reapplying
             this.player.inputs.push(packet);
             // send packet to server
-            setTimeout(() => {
-                this.io.emit("input", packet);
-            }, this.timeDelay);
+            setTimeout(() => this.io.emit("input", packet), this.timeDelay);
             // apply local change
             if (this.clientPredict) {
                 this.applyInput(this.player, packet);
