@@ -2,6 +2,8 @@
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 source $DIR/vars.sh
 
+yarn install
+
 tmux new-session -d -s $PROJECT
 tmux attach-session $PROJECT
 

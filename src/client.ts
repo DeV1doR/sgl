@@ -1,7 +1,7 @@
 import * as PIXI from "pixi.js";
 import * as io from "socket.io-client";
 
-import { BaseCore, IPlayer, IInput, IMap, Direction, CreateBasePlayer } from "./engine";
+import { BaseCore, IPlayer, IInput, ISnapshot, Direction, CreateBasePlayer } from "./engine";
 import { IKeyboad, createBox, createKey } from "./utils";
 
 class ClientGame extends BaseCore {
@@ -13,6 +13,7 @@ class ClientGame extends BaseCore {
     public players: {[id: string]: IPlayer};
     public clientPredict: boolean;
     public gameElements: { [key: string]: any };
+    public messages: ISnapshot[];
     public keyboard:  { [direction: number]: IKeyboad };
 
     private io: any;
@@ -35,6 +36,7 @@ class ClientGame extends BaseCore {
         this.player = null;
         this.players = {};
         this.gameElements = {};
+        this.messages = [];
         this.clientPredict = false;
         this.showTickRate = false;
 
@@ -44,33 +46,50 @@ class ClientGame extends BaseCore {
     }
 
     public update(): void {
+        if (this.player === null) return;
         // 1) check syncs from server
-        // TODO: this.checkSyncs();
-        // 2) process user input
+        this.processServerMessages();
+        // 2) process user input and send input to server
         this.handleInput(this.player);
-        // 3) send input to server
-        this.sendInputToServer();
-        // 4) apply input localy
-        if (this.clientPredict)
-            this.updateLocalPosition();
-        // 5) Collision check
-        // TODO: this.checkCollision();
-        // 6) rerender map
+        // 3) apply input localy
+        this.updateLocalPosition();
+        // 4) rerender map
         this.renderer.render();
     }
 
-    private sendInputToServer(): void {
+    public processServerMessages(): void {
+        while (true) {
+            let snapshot: ISnapshot = this.messages.pop();
+            if (!snapshot) {
+                break;
+            }
+            for (let playerData of snapshot.players) {
+                if (this.players.hasOwnProperty(playerData.id)) {
+                    let player: IPlayer = this.players[playerData.id];
+                    player.pos = playerData.pos;
+                    player.canvasEl.x = player.pos.x;
+                    player.canvasEl.y = player.pos.y;
+                    player.inputs = [];
+                } else {
+                    this.createPlayer(playerData);
+                }
+            }     
+        }
+    }
+
+    public sendInputToServer(): void {
         if (this.player === null) return;
         let last: IInput = this.player.inputs.pop();
         if (typeof last !== "undefined")
             this.io.emit("input", last);
     }
 
-    private updateLocalPosition(): void {
+    public updateLocalPosition(): void {
+        if (!this.clientPredict) return;
+        // this.checkCollision();
     }
 
     public handleInput(player: any): void {
-        if (this.player === null) return;
         let inputs: Direction[] = [];
         for (let direction in Object.keys(this.keyboard)) {
             if (this.keyboard[direction].isDown) {
@@ -79,11 +98,15 @@ class ClientGame extends BaseCore {
         }
         if (inputs.length > 0) {
             this.inputSeq += 1;
-            player.inputs.push({
+            let packet: IInput = {
                 seq: this.inputSeq,
                 time: Math.floor(Date.now() / 1000),
                 inputs: inputs,
-            } as IInput);
+            };
+            // store for reapplying
+            player.inputs.push(packet);
+            // send packet to server
+            this.io.emit("input", packet);
         }
     }
 
@@ -117,18 +140,8 @@ class ClientGame extends BaseCore {
         this.io.on("logout", (player: IPlayer) => {
             this.removePlayer(player);
         });
-        this.io.on("mapUpdate", (mapData: IMap) => {
-            for (let playerUpd of mapData.players) {
-                if (this.players.hasOwnProperty(playerUpd.id)) {
-                    let player: IPlayer = this.players[playerUpd.id];
-                    player.pos = playerUpd.pos;
-                    player.canvasEl.x = player.pos.x;
-                    player.canvasEl.y = player.pos.y;
-                } else {
-                    this.createPlayer(playerUpd);
-                }
-            }
-            (window as any).testData = mapData;
+        this.io.on("mapUpdate", (snapshot: ISnapshot) => {
+            this.messages.push(snapshot);
         });
         this.io.on("disconnect", () => {
             console.log("closed");

@@ -9,7 +9,7 @@ window.requestAnimationFrame = window.requestAnimationFrame || ((callback: any) 
     return id;
 });
 
-export interface IMap {
+export interface ISnapshot {
     players: IPlayer[];
 }
 
@@ -17,6 +17,7 @@ export interface IInput {
     seq: number;
     time: number;
     inputs: Direction[];
+    entityId?: string;
 }
 
 export interface IPlayer {
@@ -52,7 +53,7 @@ export const CreateBasePlayer = (): IPlayer => {
         lastInputTime: 0,
         prevPos: Vector.create({x: 0, y: 0} as IVector),
         pos: Vector.create({x: 0, y: 0} as IVector),
-        speed: Vector.create({x: 3, y: 3} as IVector),
+        speed: Vector.create({x: 5, y: 5} as IVector),
     };
 };
 

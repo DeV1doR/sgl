@@ -8,7 +8,7 @@ import * as config from "./config";
 
 // hack for client code
 (global as any).window = (global as any).document = global;
-import { BaseCore, IPlayer, IInput, IVector, IMap, Direction, Vector, CreateBasePlayer } from "./src/engine";
+import { BaseCore, IPlayer, IInput, IVector, ISnapshot, Direction, Vector, CreateBasePlayer } from "./src/engine";
 
 const env: string = process.env.NODE_ENV || "development";
 const settings: any = config[env];
@@ -20,17 +20,23 @@ const allowedHosts = settings.ALLOWED_HOSTS.join(",") || "*";
 
 class ServerEngine extends BaseCore {
 
+    public io: any;
+
     public uid: number;
-    public playersToUpdate: IPlayer[];
+    public messages: IInput[];
     public players: {[id: string]: IPlayer};
     private initTime: number;
 
-    constructor(frameTime: number, public io: SocketIO.Server) {
+    constructor(frameTime: number) {
         super(frameTime);
         this.uid = 0;
-        this.playersToUpdate = [];
+        this.messages = [];
         this.players = {};
         this.initTime = 0.01;
+    }
+
+    public setSocket(io: any) {
+        this.io = io;
     }
 
     public addPlayer(player: IPlayer): void {
@@ -44,26 +50,43 @@ class ServerEngine extends BaseCore {
     }
 
     public update(): void {
-        for (let player of this.playersToUpdate) {
-            player.prevPos = <IVector>player.pos.copy();
-            // 1) Process input
-            let vector: IVector = this.processInput(player);
-            player.pos.add(vector);
-            player.inputs = [];
-            // 2) Check collision
-            // TODO: this.checkCollision(player);
-        }
-        this.playersToUpdate = [];
-        // 3) Send update
-        this.serverUpdate();
+        // 1) Process inputs
+        this.processInputs();
+        // 2) Send world state;
+        this.sendWorldState();
     }
 
-    private processInput(player: IPlayer): IVector {
+    public sendWorldState(): void {
+        // send snapshot
+        this.io.emit("mapUpdate", <ISnapshot>{
+            players: Object.keys(this.players).map((uid) => this.players[uid]),
+        });
+    }
+
+    public processInputs(): void {
+        while (true) {
+            let input: IInput = this.messages.pop();
+            if (!input) {
+                break;
+            }
+            if (this._validateInput(input)) {
+                let id: string = input.entityId;
+                this.applyInput(this.players[id], input);
+            }
+        }
+    }
+
+    private _validateInput(input: IInput): boolean {
+        return true;
+    }
+
+    private applyInput(player: IPlayer, input: IInput): void {
+        player.prevPos = player.pos.copy();
+
         let vector: IVector = Vector.create({x: 0, y: 0} as IVector);
-        for (let input of player.inputs) {
-            //don't process ones we already have simulated locally
-            if (input.seq <= player.lastInputSeq)
-                continue;
+        
+        //don't process ones we already have simulated locally
+        if (input.seq > player.lastInputSeq) {
             for (let cmd of input.inputs) {
                 switch (cmd) {
                     case Direction.Down:
@@ -81,19 +104,11 @@ class ServerEngine extends BaseCore {
                 }
             }
         }
+        player.lastInputTime = input.time;
+        player.lastInputSeq = input.seq;
 
-        if (player.inputs.length) {
-            player.lastInputTime = player.inputs[player.inputs.length - 1].time;
-            player.lastInputSeq = player.inputs[player.inputs.length - 1].seq;
-        }
-        return vector;
-    }
-
-    private serverUpdate(): void {
-        // send snapshot
-        this.io.emit("mapUpdate", <IMap>{
-            players: Object.keys(this.players).map((uid) => this.players[uid]),
-        });
+        player.pos.add(vector);
+        // this._checkCollision(player);
     }
 }
 
@@ -138,24 +153,16 @@ class Server {
                 this.io.sockets.emit("logout", player);
             });
 
-            socket.on("latency", (data: any) => {
-                if (!data) return;
-                socket.emit("latency", {
-                    timestamp: Date.now(),
-                    processed: data.timestamp,
-                });
-            });
-
             socket.on("input", (input: IInput) => {
-                player.inputs.push(input);
-                this.gameEngine.playersToUpdate.push(player);
-                console.log('Received input: ', input);
+                input.entityId = player.id;
+                this.gameEngine.messages.push(input);
             })
         });
     }
 
     private createEngine(): void {
-        this.gameEngine = new ServerEngine(30, this.io);
+        this.gameEngine = new ServerEngine(10);
+        this.gameEngine.setSocket(this.io);
         this.gameEngine.showTickRate = false;
     }
 
