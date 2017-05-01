@@ -14,7 +14,8 @@ class ClientGame extends BaseCore {
     public players: {[id: string]: IPlayer};
     public clientPredict: boolean;
     public gameElements: { [key: string]: any };
-    public keyboard:  { [direction: number]: IKeyboad };
+    public keyboard: { [direction: number]: IKeyboad };
+    public timeDelay: number;
 
     private latencyBlock: HTMLElement;
     private io: any;
@@ -35,6 +36,7 @@ class ClientGame extends BaseCore {
         }, true);
 
         this.player = null;
+        this.timeDelay = 0;
         this.players = {};
         this.gameElements = {};
         this.clientPredict = true;
@@ -46,6 +48,59 @@ class ClientGame extends BaseCore {
         this.create();
         this.runLoop();
         this.checkLatency();
+
+        let nodes: NodeList = document.querySelectorAll(".number-spinner button");
+        for (let i = 0; i < nodes.length; i++) {
+            let node: Node = nodes[i];
+            let callback = (event: any) => {
+                event.preventDefault();
+                let input: any = event.target.closest(".number-spinner").querySelector("input");
+                let data: any = (node as any).dataset;
+                let oldValue: number = parseInt(input.value.trim());
+                let value: number;
+                if (isNaN(value)) {
+                    value = 1;
+                }
+                if (data.dir == "up") {
+                    value = oldValue + 1;
+                } else {
+                    if (oldValue > 1) {
+                        value = oldValue - 1;
+                    } else {
+                        value = 1;
+                    }
+                }
+                input.value = value;
+                switch (input.id) {
+                    case "tps":
+                        this.io.emit("changeTPS", {frameTime: value});
+                        break;
+                    case "fps":
+                        this.frameTime = value;
+                        break;
+                }
+            };
+            node.addEventListener("click", callback);
+        }
+        let inputs: NodeList = document.querySelectorAll(".number-spinner input");
+        for (let i = 0; i < inputs.length; i++) {
+            let input: any = inputs[i];
+            input.addEventListener("keydown", (event: any) => {
+                let value: number = parseInt(input.value.trim());
+                if (isNaN(value)) {
+                    value = 1;
+                }
+                switch (input.id) {
+                    case "tps":
+                        this.io.emit("changeTPS", {frameTime: value});
+                        break;
+                    case "fps":
+                        this.frameTime = value;
+                        break;
+                }
+                console.log(value);
+            });
+        }
     }
 
     public checkLatency(): void {
@@ -62,15 +117,6 @@ class ClientGame extends BaseCore {
         this.handleInputs();
         // 3) rerender map
         this.render();
-    }
-
-    public render(): void {
-        Object.keys(this.players).forEach(uid => {
-            let player: IPlayer = this.players[uid];
-            player.canvasEl.x = player.pos.x;
-            player.canvasEl.y = player.pos.y;
-        });
-        this.renderer.render();      
     }
 
     public processServerMessages(): void {
@@ -127,14 +173,21 @@ class ClientGame extends BaseCore {
             // send packet to server
             setTimeout(() => {
                 this.io.emit("input", packet);
-            }, 1000);
+            }, this.timeDelay);
             // apply local change
             if (this.clientPredict) {
                 this.applyInput(this.player, packet);
-                this.player.canvasEl.x = this.player.pos.x;
-                this.player.canvasEl.y = this.player.pos.y;
             }
         }
+    }
+
+    public render(): void {
+        Object.keys(this.players).forEach(uid => {
+            let player: IPlayer = this.players[uid];
+            player.canvasEl.x = player.pos.x;
+            player.canvasEl.y = player.pos.y;
+        });
+        this.renderer.render();      
     }
 
     private createPlayer(player: IPlayer) {
@@ -171,7 +224,7 @@ class ClientGame extends BaseCore {
             this.queue.send(snapshot);
         });
         this.io.on("latency", (data: any) => {
-            let delta: number = data.timestamp - data.processed;
+            let delta: number = data.timestamp - data.processed + this.timeDelay;
             this.latencyBlock.innerHTML = `Latency: ${delta}`;
         });
         this.io.on("disconnect", () => {

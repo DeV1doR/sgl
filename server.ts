@@ -121,9 +121,14 @@ class Server {
                 this.io.emit("message", data);
             });
 
+            socket.on("changeTPS", (data: any) => {
+                this.gameEngine.frameTime = data.frameTime;
+                console.log("Changed TPS to ", this.gameEngine.frameTime);
+            });
+
             socket.on("latency", (data: ILatency) => {
                 let resp: ILatency = {
-                    timestamp: Date.now() + 250,
+                    timestamp: Date.now(),
                     processed: data.timestamp,
                 };
                 socket.emit("latency", resp);
