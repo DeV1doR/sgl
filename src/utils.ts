@@ -16,8 +16,7 @@ export const createBox = (x: number, y: number, width: number, height: number): 
 
     const container = new PIXI.Container();
     container.addChild(graphics);
-    container.x = x;
-    container.y = y;
+    container.position.set(x - 0.5 * width, y - 0.5 * height);
     return container;
 };
 

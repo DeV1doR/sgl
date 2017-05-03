@@ -1,7 +1,7 @@
 import * as PIXI from "pixi.js";
 import * as io from "socket.io-client";
 
-import { BaseCore, IPlayer, IInput, ILatency, ISnapshot, Direction, CreateBasePlayer, MessageQueue } from "./engine";
+import { BaseCore, IPlayer, IInput, ILatency, ISnapshot, Direction, CreateBasePlayer, MessageQueue, Vector } from "./engine";
 import { IKeyboad, createBox, createKey } from "./utils";
 
 class ClientGame extends BaseCore {
@@ -141,9 +141,8 @@ class ClientGame extends BaseCore {
             for (let playerData of snapshot.online) {
                 if (this.players.hasOwnProperty(playerData.id)) {
                     let player: IPlayer = this.players[playerData.id];
-                    player.pos = playerData.pos;
-
                     if (this.player.id === player.id) {
+                        player.pos = playerData.pos;
                         if (this.serverReconciliation) {
                             let i: number = 0;
                             while (i < this.player.inputs.length) {
@@ -161,6 +160,8 @@ class ClientGame extends BaseCore {
                             // no prediction, wait for server
                             this.player.inputs = [];
                         }
+                    } else {
+                        player.pos = Vector.lerp(playerData.prevPos, playerData.pos, 0.5);
                     }
                 } else {
                     this._createPlayer(playerData);
@@ -200,8 +201,10 @@ class ClientGame extends BaseCore {
     public render(): void {
         Object.keys(this.players).forEach(uid => {
             let player: IPlayer = this.players[uid];
-            player.canvasEl.x = player.pos.x;
-            player.canvasEl.y = player.pos.y;
+            player.canvasEl.position.set(
+                player.pos.x - 0.5 * player.canvasEl.width - 1,
+                player.pos.y - 0.5 * player.canvasEl.height - 1
+            );
         });
         this.renderer.render();      
     }

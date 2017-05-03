@@ -75,6 +75,13 @@ export class Vector implements IVector {
             y: parseInt((v1.y + v2.y).toFixed()),
         }
     }
+
+    public static lerp(v1: IVector, v2: IVector, t: number): IVector {
+        return <IVector>{
+            x: parseInt((v1.x + t * (v2.x - v1.x)).toFixed()),
+            y: parseInt((v1.y + t * (v2.y - v1.y)).toFixed()),
+        }
+    }
 }
 
 class IMessageQueue<T> {
