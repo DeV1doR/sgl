@@ -13,6 +13,7 @@ class ClientGame extends BaseCore {
     public player: IPlayer;
     public players: {[id: string]: IPlayer};
     public clientPredict: boolean;
+    public serverReconciliation: boolean;
     public gameElements: { [key: string]: any };
     public keyboard: { [direction: number]: IKeyboad };
     public timeDelay: number;
@@ -40,6 +41,7 @@ class ClientGame extends BaseCore {
         this.players = {};
         this.gameElements = {};
         this.clientPredict = false;
+        this.serverReconciliation = false;
         this.showTickRate = false;
         this.queue = new MessageQueue<ISnapshot>();
         this.latencyBlock = document.getElementById("latency");
@@ -103,8 +105,11 @@ class ClientGame extends BaseCore {
                 console.log(value);
             });
         }
-        document.querySelector("#interpolation").addEventListener("click", (event: any) => {
+        document.querySelector("#client-prediction").addEventListener("click", (event: any) => {
             this.clientPredict = (this.clientPredict) ? false: true;
+        });
+        document.querySelector("#server-reconciliation").addEventListener("click", (event: any) => {
+            this.serverReconciliation = (this.serverReconciliation) ? false: true;
         });
         document.querySelector("#extrapolation").addEventListener("click", (event: any) => {
             // TODO
@@ -138,22 +143,24 @@ class ClientGame extends BaseCore {
                     let player: IPlayer = this.players[playerData.id];
                     player.pos = playerData.pos;
 
-                    if (this.clientPredict) {
-                        let i: number = 0;
-                        while (i < player.inputs.length) {
-                            let input: IInput = player.inputs[i];
-                            // if already processed from server, remove input
-                            if (input.seq <= playerData.lastInputSeq) {
-                                player.inputs.splice(i, 1);
-                            // reapply it, don't wait server response
-                            } else {
-                                this.applyInput(player, input);
-                                i++;
+                    if (this.player.id === player.id) {
+                        if (this.serverReconciliation) {
+                            let i: number = 0;
+                            while (i < this.player.inputs.length) {
+                                let input: IInput = this.player.inputs[i];
+                                // if already processed from server, remove input
+                                if (input.seq <= playerData.lastInputSeq) {
+                                    this.player.inputs.splice(i, 1);
+                                // reapply it, don't wait server response
+                                } else {
+                                    this.applyInput(this.player, input);
+                                    i++;
+                                }
                             }
+                        } else {
+                            // no prediction, wait for server
+                            this.player.inputs = [];
                         }
-                    } else {
-                        // no prediction, wait for server
-                        player.inputs = [];
                     }
                 } else {
                     this.createPlayer(playerData);
