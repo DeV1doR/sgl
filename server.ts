@@ -25,6 +25,7 @@ class ServerEngine extends BaseCore {
     public uid: number;
     public queue: MessageQueue<IInput>;
     public players: {[id: string]: IPlayer};
+    public offline: {[id: string]: IPlayer};
     private initTime: number;
 
     constructor(frameTime: number) {
@@ -32,6 +33,7 @@ class ServerEngine extends BaseCore {
         this.uid = 0;
         this.queue = new MessageQueue<IInput>();
         this.players = {};
+        this.offline = {};
         this.initTime = 0.01;
     }
 
@@ -47,6 +49,7 @@ class ServerEngine extends BaseCore {
 
     public removePlayer(player: IPlayer): void {
         delete this.players[player.id];
+        delete this.offline[player.id];
     }
 
     public update(): void {
@@ -59,7 +62,12 @@ class ServerEngine extends BaseCore {
     public sendWorldState(): void {
         // send snapshot
         this.io.emit("mapUpdate", <ISnapshot>{
-            players: Object.keys(this.players).map((uid) => this.players[uid]),
+            online: Object.keys(this.players).map((uid: string) => this.players[uid]),
+            offline: Object.keys(this.offline).map((uid: string) => {
+                let player: IPlayer = this.offline[uid];
+                this.removePlayer(player);
+                return player;
+            }),
         });
     }
 
@@ -114,7 +122,7 @@ class Server {
             let player: IPlayer = CreateBasePlayer();
             this.gameEngine.addPlayer(player);
 
-            socket.emit("login", player);
+            socket.emit("registration", player);
 
             socket.on("message", (data: any) => {
                 console.log(`[server](message): ${data}`);
@@ -135,10 +143,8 @@ class Server {
             });
 
             socket.on("disconnect", () => {
-                this.gameEngine.removePlayer(player);
                 console.log("Client disconnected");
-
-                this.io.sockets.emit("logout", player);
+                this.gameEngine.offline[player.id] = player;
             });
 
             socket.on("input", (input: IInput) => {

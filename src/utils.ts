@@ -12,10 +12,12 @@ export const createBox = (x: number, y: number, width: number, height: number): 
     const graphics = new PIXI.Graphics();
     graphics.beginFill(0xFFFF00);
     graphics.lineStyle(1, 0xFF0000);
-    graphics.drawRect(x, y, width, height);
+    graphics.drawRect(0, 0, width, height);
 
     const container = new PIXI.Container();
     container.addChild(graphics);
+    container.x = x;
+    container.y = y;
     return container;
 };
 

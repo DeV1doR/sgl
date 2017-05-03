@@ -10,7 +10,8 @@ window.requestAnimationFrame = window.requestAnimationFrame || ((callback: any) 
 });
 
 export interface ISnapshot {
-    players: IPlayer[];
+    online: IPlayer[];
+    offline: IPlayer[];
 }
 
 export interface IInput {

@@ -138,7 +138,7 @@ class ClientGame extends BaseCore {
             if (!snapshot) {
                 break;
             }
-            for (let playerData of snapshot.players) {
+            for (let playerData of snapshot.online) {
                 if (this.players.hasOwnProperty(playerData.id)) {
                     let player: IPlayer = this.players[playerData.id];
                     player.pos = playerData.pos;
@@ -163,9 +163,12 @@ class ClientGame extends BaseCore {
                         }
                     }
                 } else {
-                    this.createPlayer(playerData);
+                    this._createPlayer(playerData);
                 }
-            }     
+            };
+            for (let playerData of snapshot.offline) {
+                this._removePlayer(this.players[playerData.id]);
+            }
         }
     }
 
@@ -203,35 +206,39 @@ class ClientGame extends BaseCore {
         this.renderer.render();      
     }
 
-    private createPlayer(player: IPlayer) {
-        this.players[player.id] = player;
-        this.players[player.id].canvasEl = createBox(player.pos.x, player.pos.y, 20, 20);
-        this.renderer.stage.addChild(this.players[player.id].canvasEl);
+    private _createPlayer(player: IPlayer): IPlayer {
+        if (!this.players.hasOwnProperty(player.id)) {
+            this.players[player.id] = player;
+            this.players[player.id].canvasEl = createBox(player.pos.x, player.pos.y, 20, 20);
+            this.renderer.stage.addChild(this.players[player.id].canvasEl);
+        }
         return this.players[player.id];
     }
 
-    private removePlayer(player: IPlayer) {
-        this.renderer.stage.removeChild(this.players[player.id].canvasEl);
-        delete this.players[player.id]
+    private _removePlayer(player: IPlayer): void {
+        if (!this.players.hasOwnProperty(player.id)) return;
+        this.players[player.id].canvasEl.destroy();
+        delete this.players[player.id];
+    }
+
+    private _clearPlayers(): void {
+        Object.keys(this.players).forEach(uid => {
+            let player: IPlayer = this.players[uid];
+            this._removePlayer(player);
+        });
     }
 
     private createSocket(): void {
         this.io = io("http://localhost:9001");
         this.io.on("connect", () => {
-            Object.keys(this.players).forEach(uid => {
-                let player: IPlayer = this.players[uid];
-                this.removePlayer(player);
-            });
+            this._clearPlayers();
             console.log("open");
         });
         this.io.on("message", (data: any) => {
             console.log(data);
         });
-        this.io.on("login", (player: IPlayer) => {
-            this.player = this.createPlayer(player);
-        });
-        this.io.on("logout", (player: IPlayer) => {
-            this.removePlayer(player);
+        this.io.on("registration", (player: IPlayer) => {
+            this.player = this._createPlayer(player);
         });
         this.io.on("mapUpdate", (snapshot: ISnapshot) => {
             this.queue.send(snapshot);
