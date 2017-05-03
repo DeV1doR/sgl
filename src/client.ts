@@ -37,7 +37,7 @@ class ClientGame extends BaseCore {
         }, true);
 
         this.player = null;
-        this.timeDelay = 1000;
+        this.timeDelay = 250;
         this.players = {};
         this.gameElements = {};
         this.clientPredict = false;
@@ -141,8 +141,8 @@ class ClientGame extends BaseCore {
             for (let playerData of snapshot.online) {
                 if (this.players.hasOwnProperty(playerData.id)) {
                     let player: IPlayer = this.players[playerData.id];
+                    player.pos = playerData.pos;
                     if (this.player.id === player.id) {
-                        player.pos = playerData.pos;
                         if (this.serverReconciliation) {
                             let i: number = 0;
                             while (i < this.player.inputs.length) {
@@ -161,7 +161,8 @@ class ClientGame extends BaseCore {
                             this.player.inputs = [];
                         }
                     } else {
-                        player.pos = Vector.lerp(playerData.prevPos, playerData.pos, 0.5);
+                        // player.pos = Vector.lerp(player.prevPos, playerData.prevPos, 0.01);
+                        // player.prevPos = player.pos;
                     }
                 } else {
                     this._createPlayer(playerData);
