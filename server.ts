@@ -26,6 +26,7 @@ class ServerEngine extends BaseCore {
     public queue: MessageQueue<IInput>;
     public players: {[id: string]: IPlayer};
     public offline: {[id: string]: IPlayer};
+    public fakeLatency: number;
     private initTime: number;
 
     constructor(frameTime: number) {
@@ -34,7 +35,8 @@ class ServerEngine extends BaseCore {
         this.queue = new MessageQueue<IInput>();
         this.players = {};
         this.offline = {};
-        this.initTime = 0.01;
+        this.fakeLatency = 0;
+        this.initTime = Date.now();
     }
 
     public setSocket(io: any) {
@@ -61,14 +63,16 @@ class ServerEngine extends BaseCore {
 
     public sendWorldState(): void {
         // send snapshot
-        this.io.emit("mapUpdate", <ISnapshot>{
-            online: Object.keys(this.players).map((uid: string) => this.players[uid]),
-            offline: Object.keys(this.offline).map((uid: string) => {
-                let player: IPlayer = this.offline[uid];
-                this.removePlayer(player);
-                return player;
-            }),
-        });
+        setTimeout(() => {
+            this.io.emit("mapUpdate", <ISnapshot>{
+                online: Object.keys(this.players).map((uid: string) => this.players[uid]),
+                offline: Object.keys(this.offline).map((uid: string) => {
+                    let player: IPlayer = this.offline[uid];
+                    this.removePlayer(player);
+                    return player;
+                }),
+            });
+        }, this.fakeLatency);
     }
 
     public processInputs(): void {
@@ -123,15 +127,29 @@ class Server {
             this.gameEngine.addPlayer(player);
 
             socket.emit("registration", player);
+            socket.emit("optionsUpdate", {
+                TPS: this.gameEngine.frameTime
+            });
 
             socket.on("message", (data: any) => {
                 console.log(`[server](message): ${data}`);
                 this.io.emit("message", data);
             });
 
-            socket.on("changeTPS", (data: any) => {
-                this.gameEngine.frameTime = data.frameTime;
-                console.log("Changed TPS to ", this.gameEngine.frameTime);
+            socket.on("optionsUpdate", (data: any) => {
+                if (data.TPS) {
+                    this.gameEngine.frameTime = data.TPS;
+                    console.log("Changed TPS to ", this.gameEngine.frameTime);
+                }
+                if (data.fakeLatency) {
+                    this.gameEngine.fakeLatency = parseInt(data.fakeLatency);
+                    console.log("Changed fake latency to ", this.gameEngine.fakeLatency);
+                }
+
+                this.io.emit("optionsUpdate", {
+                    TPS: this.gameEngine.frameTime,
+                    fakeLatency: this.gameEngine.fakeLatency,
+                });
             });
 
             socket.on("latency", (data: ILatency) => {

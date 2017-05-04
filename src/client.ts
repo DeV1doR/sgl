@@ -16,9 +16,8 @@ class ClientGame extends BaseCore {
     public serverReconciliation: boolean;
     public gameElements: { [key: string]: any };
     public keyboard: { [direction: number]: IKeyboad };
-    public timeDelay: number;
+    public fakeLatency: number;
 
-    private latencyBlock: HTMLElement;
     private io: any;
 
     constructor(frameTime: number) {
@@ -37,14 +36,13 @@ class ClientGame extends BaseCore {
         }, true);
 
         this.player = null;
-        this.timeDelay = 250;
+        this.fakeLatency = 250;
         this.players = {};
         this.gameElements = {};
         this.clientPredict = false;
         this.serverReconciliation = false;
         this.showTickRate = false;
         this.queue = new MessageQueue<ISnapshot>();
-        this.latencyBlock = document.getElementById("latency");
 
         this.createSocket();
         this.create();
@@ -54,57 +52,28 @@ class ClientGame extends BaseCore {
     }
 
     public panelEvents(): void {
-        let nodes: NodeList = document.querySelectorAll(".number-spinner button");
-        for (let i = 0; i < nodes.length; i++) {
-            let node: Node = nodes[i];
-            let callback = (event: any) => {
-                let input: any = event.target.closest(".number-spinner").querySelector("input");
-                let data: any = (node as any).dataset;
-                let oldValue: number = parseInt(input.value.trim());
-                let value: number;
-                if (isNaN(value)) {
-                    value = 1;
-                }
-                if (data.dir == "up") {
-                    value = oldValue + 1;
-                } else {
-                    if (oldValue > 1) {
-                        value = oldValue - 1;
-                    } else {
-                        value = 1;
-                    }
-                }
-                input.value = value;
-                switch (input.id) {
-                    case "tps":
-                        this.io.emit("changeTPS", {frameTime: value});
-                        break;
-                    case "fps":
-                        this.frameTime = value;
-                        break;
-                }
-            };
-            node.addEventListener("click", callback);
+        const callback = (event: any) => {
+            switch (event.target.id) {
+                case "tps":
+                    this.io.emit("optionsUpdate", {TPS: event.target.value});
+                    break;
+                case "latency":
+                    this.io.emit("optionsUpdate", {fakeLatency: event.target.value});
+                    break;
+                case "fps":
+                    this.frameTime = event.target.value;
+                    event.target.parentElement.querySelector("label").innerHTML = `FPS=${this.frameTime}`;
+                    break;
+            }
+        };
+        for (let node of document.querySelectorAll('.input-bar-slider') as any) {
+            node.addEventListener("change", callback);
+            node.addEventListener("input", callback);
         }
-        let inputs: NodeList = document.querySelectorAll(".number-spinner input");
-        for (let i = 0; i < inputs.length; i++) {
-            let input: any = inputs[i];
-            input.addEventListener("keydown", (event: any) => {
-                let value: number = parseInt(input.value.trim());
-                if (isNaN(value)) {
-                    value = 1;
-                }
-                switch (input.id) {
-                    case "tps":
-                        this.io.emit("changeTPS", {frameTime: value});
-                        break;
-                    case "fps":
-                        this.frameTime = value;
-                        break;
-                }
-                console.log(value);
-            });
-        }
+        let latencyBlock: any = document.querySelector('#latency');
+        latencyBlock.value = this.fakeLatency;
+        latencyBlock.parentElement.querySelector("label").innerHTML = `Fake latency=${this.fakeLatency}`;
+
         document.querySelector("#client-prediction").addEventListener("click", (event: any) => {
             this.clientPredict = (this.clientPredict) ? false: true;
         });
@@ -141,28 +110,11 @@ class ClientGame extends BaseCore {
             for (let playerData of snapshot.online) {
                 if (this.players.hasOwnProperty(playerData.id)) {
                     let player: IPlayer = this.players[playerData.id];
-                    player.pos = playerData.pos;
-                    if (this.player.id === player.id) {
-                        if (this.serverReconciliation) {
-                            let i: number = 0;
-                            while (i < this.player.inputs.length) {
-                                let input: IInput = this.player.inputs[i];
-                                // if already processed from server, remove input
-                                if (input.seq <= playerData.lastInputSeq) {
-                                    this.player.inputs.splice(i, 1);
-                                // reapply it, don't wait server response
-                                } else {
-                                    this.applyInput(this.player, input);
-                                    i++;
-                                }
-                            }
-                        } else {
-                            // no prediction, wait for server
-                            this.player.inputs = [];
-                        }
+                    if (this._isUserPlayer(player)) {
+                        this._playerPredictionCorrection(playerData);
                     } else {
-                        // player.pos = Vector.lerp(player.prevPos, playerData.prevPos, 0.01);
-                        // player.prevPos = player.pos;
+                        player.prevPos = Vector.copy(player.pos);
+                        player.pos = Vector.lerp(playerData.prevPos, playerData.pos, 0.1);
                     }
                 } else {
                     this._createPlayer(playerData);
@@ -191,7 +143,7 @@ class ClientGame extends BaseCore {
             // store for reapplying
             this.player.inputs.push(packet);
             // send packet to server
-            setTimeout(() => this.io.emit("input", packet), this.timeDelay);
+            setTimeout(() => this.io.emit("input", packet), this.fakeLatency);
             // apply local change
             if (this.clientPredict) {
                 this.applyInput(this.player, packet);
@@ -208,6 +160,34 @@ class ClientGame extends BaseCore {
             );
         });
         this.renderer.render();      
+    }
+
+    private _playerPredictionCorrection(playerData: IPlayer): void {
+        this.player.pos = playerData.pos;
+        if (this.serverReconciliation) {
+            let i: number = 0;
+            while (i < this.player.inputs.length) {
+                let input: IInput = this.player.inputs[i];
+                // if already processed from server, remove input
+                if (input.seq <= playerData.lastInputSeq) {
+                    this.player.inputs.splice(i, 1);
+                // reapply it, don't wait server response
+                } else {
+                    this.applyInput(this.player, input);
+                    i++;
+                }
+            }
+        } else {
+            // no prediction, wait for server
+            this.player.inputs = [];
+        }
+    }
+
+    private _isUserPlayer(player: IPlayer): boolean {
+        if (!this.player) {
+            return false;
+        }
+        return this.player.id === player.id;
     }
 
     private _createPlayer(player: IPlayer): IPlayer {
@@ -236,6 +216,7 @@ class ClientGame extends BaseCore {
         this.io = io("http://localhost:9001");
         this.io.on("connect", () => {
             this._clearPlayers();
+            this.io.emit("optionsUpdate", {fakeLatency: this.fakeLatency});
             console.log("open");
         });
         this.io.on("message", (data: any) => {
@@ -247,9 +228,23 @@ class ClientGame extends BaseCore {
         this.io.on("mapUpdate", (snapshot: ISnapshot) => {
             this.queue.send(snapshot);
         });
+        this.io.on("optionsUpdate", (data: any) => {
+            let tpsInput: any = document.querySelector('input#tps');
+            tpsInput.value = data.TPS;
+            tpsInput.parentElement.querySelector("label").innerHTML = `TPS=${data.TPS}`;
+
+            let latencyInput: any = document.querySelector('input#latency');
+            latencyInput.value = data.fakeLatency;
+            latencyInput.parentElement.querySelector("label").innerHTML = `Fake latency=${data.fakeLatency}`;
+            this.fakeLatency = data.fakeLatency;
+        });
         this.io.on("latency", (data: any) => {
-            let delta: number = data.timestamp - data.processed + this.timeDelay;
-            this.latencyBlock.innerHTML = `Latency: ${delta}`;
+            let real: number = data.timestamp - data.processed;
+            let fake: number = this.fakeLatency;
+            let delta: number = real + fake;
+            document.getElementById("real-latency").innerHTML = `Real latency: ${real}`;
+            document.getElementById("fake-latency").innerHTML = `Fake latency: ${fake}`;
+            document.getElementById("total-latency").innerHTML = `Total latency: ${delta}`;
         });
         this.io.on("disconnect", () => {
             console.log("closed");

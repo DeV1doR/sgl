@@ -11,10 +11,10 @@
             <div class="col-md-10 col-md-offset-2"><canvas id="sgl"></canvas></div>
         </div>
         <div class="row"></div>
-            <div class="col-md-5 col-md-offset-3">
+            <div class="col-md-7 col-md-offset-3">
                 <form class="form-horizontal" onsubmit="event.preventDefault();">
                     <div class="form-group row">
-                        <div class="col-md-12">
+                        <div class="col-md-8">
                             <label class="radio-inline">
                                 <input type="checkbox" name="client-prediction" id="client-prediction" value="client-prediction">Client prediction
                             </label>
@@ -27,33 +27,27 @@
                             <label class="radio-inline">
                                 <input type="checkbox" name="extrapolation" id="extrapolation" value="extrapolation">Extrapolation
                             </label>
-                            <span class="radio-inline" id="latency">Latency: 0</span>
+                        </div>
+                        <div class="col-md-4">
+                            <ul class="list-group">
+                                <li id="real-latency" class="list-group-item">Real latency: ~</li>
+                                <li id="fake-latency" class="list-group-item">Fake latency: ~</li>
+                                <li id="total-latency" class="list-group-item list-group-item-info">Total latency: ~</li>
+                            </ul>
                         </div>
                     </div>
                     <div class="form-group row">
-                        <div class="col-md-6">
-                            <label for="tps">Ticks per second (TPS)</label>
-                            <div class="input-group number-spinner">
-                                <span class="input-group-btn">
-                                    <button class="btn btn-default" data-dir="dwn"><span class="glyphicon glyphicon-minus"></span></button>
-                                </span>
-                                <input id="tps" type="text" class="form-control text-center" value="30">
-                                <span class="input-group-btn">
-                                    <button class="btn btn-default" data-dir="up"><span class="glyphicon glyphicon-plus"></span></button>
-                                </span>
-                            </div>
+                        <div class="col-md-4">
+                            <label for="tps">TPS=~</label>
+                            <input id="tps" class="input-bar-slider" type="range" min="1" max="120" />
                         </div>
-                        <div class="col-md-6">
-                            <label for="fps">Frames per second (FPS)</label>
-                            <div class="input-group number-spinner">
-                                <span class="input-group-btn">
-                                    <button class="btn btn-default" data-dir="dwn"><span class="glyphicon glyphicon-minus"></span></button>
-                                </span>
-                                <input id="fps" type="text" class="form-control text-center" value="60">
-                                <span class="input-group-btn">
-                                    <button class="btn btn-default" data-dir="up"><span class="glyphicon glyphicon-plus"></span></button>
-                                </span>
-                            </div>
+                        <div class="col-md-4">
+                            <label for="fps">FPS=60</label>
+                            <input id="fps" class="input-bar-slider" type="range" min="1" max="60" />
+                        </div>
+                        <div class="col-md-4">
+                            <label for="latency">Fake latency=~</label>
+                            <input id="latency" class="input-bar-slider" type="range" min="0" max="1000" />
                         </div>
                     </div>
                 </form>
