@@ -128,7 +128,8 @@ class Server {
 
             socket.emit("registration", player);
             socket.emit("optionsUpdate", {
-                TPS: this.gameEngine.frameTime
+                TPS: this.gameEngine.frameTime,
+                fakeLatency: this.gameEngine.fakeLatency,
             });
 
             socket.on("message", (data: any) => {
@@ -138,7 +139,7 @@ class Server {
 
             socket.on("optionsUpdate", (data: any) => {
                 if (data.TPS) {
-                    this.gameEngine.frameTime = data.TPS;
+                    this.gameEngine.frameTime = parseInt(data.TPS);
                     console.log("Changed TPS to ", this.gameEngine.frameTime);
                 }
                 if (data.fakeLatency) {

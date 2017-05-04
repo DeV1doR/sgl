@@ -36,7 +36,7 @@ class ClientGame extends BaseCore {
         }, true);
 
         this.player = null;
-        this.fakeLatency = 250;
+        this.fakeLatency = 0;
         this.players = {};
         this.gameElements = {};
         this.clientPredict = false;
@@ -70,9 +70,6 @@ class ClientGame extends BaseCore {
             node.addEventListener("change", callback);
             node.addEventListener("input", callback);
         }
-        let latencyBlock: any = document.querySelector('#latency');
-        latencyBlock.value = this.fakeLatency;
-        latencyBlock.parentElement.querySelector("label").innerHTML = `Fake latency=${this.fakeLatency}`;
 
         document.querySelector("#client-prediction").addEventListener("click", (event: any) => {
             this.clientPredict = (this.clientPredict) ? false: true;
@@ -113,8 +110,8 @@ class ClientGame extends BaseCore {
                     if (this._isUserPlayer(player)) {
                         this._playerPredictionCorrection(playerData);
                     } else {
+                        player.pos = Vector.lerp(player.prevPos, playerData.pos, 0.025);
                         player.prevPos = Vector.copy(player.pos);
-                        player.pos = Vector.lerp(playerData.prevPos, playerData.pos, 0.1);
                     }
                 } else {
                     this._createPlayer(playerData);
@@ -216,7 +213,6 @@ class ClientGame extends BaseCore {
         this.io = io("http://localhost:9001");
         this.io.on("connect", () => {
             this._clearPlayers();
-            this.io.emit("optionsUpdate", {fakeLatency: this.fakeLatency});
             console.log("open");
         });
         this.io.on("message", (data: any) => {
