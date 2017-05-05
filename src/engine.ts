@@ -10,8 +10,9 @@ window.requestAnimationFrame = window.requestAnimationFrame || ((callback: any) 
 });
 
 export interface ISnapshot {
-    online: IPlayer[];
+    players: {[uid: string]: IPlayer};
     offline: IPlayer[];
+    time: number;
 }
 
 export interface IInput {
@@ -91,28 +92,43 @@ class IMessageQueue<T> {
 
 export class MessageQueue<T> {
 
-    public messages: IMessageQueue<T>[]
+    public messages: IMessageQueue<T>[];
 
-    constructor(public timeDelay: number = 0) {
+    constructor(public timeDelay: number = 0, public bufferSize: number = 100) {
         this.messages = [];
     }
 
-    send(message: T): void {
+    public send(message: T): void {
+        // limit buffer size
+        if (this.length >= this.bufferSize) {
+            this.messages.splice(0, 1);
+            return;
+        }
         this.messages.push({
             recvTs: Date.now() + this.timeDelay,
             payload: message,
         });
     }
 
-    recv(): T {
-        let now: number = Date.now();
-        for (let i in this.messages) {
-            let message = this.messages[i];
-            if (message.recvTs <= now) {
-                this.messages.splice(parseInt(i), 1);
-                return message.payload;
-            }
+    public recv(): T {
+        let message: IMessageQueue<T> = this.messages.splice(0, 1)[0];
+        if (typeof message !== "undefined") {
+            return message.payload;
         }
+        // else {
+        //     let now: number = Date.now();
+        //     for (let i in this.messages) {
+        //         let message = this.messages[i];
+        //         if (message.recvTs <= now) {
+        //             this.messages.splice(parseInt(i), 1);
+        //             return message.payload;
+        //         }
+        //     }
+        // }
+    }
+
+    public get length(): number {
+        return this.messages.length;
     }
 }
 

@@ -28,6 +28,7 @@ class ServerEngine extends BaseCore {
     public offline: {[id: string]: IPlayer};
     public fakeLatency: number;
     private initTime: number;
+    private serverTime: number;
 
     constructor(frameTime: number) {
         super(frameTime);
@@ -37,6 +38,7 @@ class ServerEngine extends BaseCore {
         this.offline = {};
         this.fakeLatency = 0;
         this.initTime = Date.now();
+        this.serverTime = 0.01;
     }
 
     public setSocket(io: any) {
@@ -63,14 +65,16 @@ class ServerEngine extends BaseCore {
 
     public sendWorldState(): void {
         // send snapshot
+        this.serverTime = Date.now();
         setTimeout(() => {
             this.io.emit("mapUpdate", <ISnapshot>{
-                online: Object.keys(this.players).map((uid: string) => this.players[uid]),
+                players: this.players,
                 offline: Object.keys(this.offline).map((uid: string) => {
                     let player: IPlayer = this.offline[uid];
                     this.removePlayer(player);
                     return player;
                 }),
+                time: this.serverTime,
             });
         }, this.fakeLatency);
     }

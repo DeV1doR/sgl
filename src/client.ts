@@ -1,7 +1,7 @@
 import * as PIXI from "pixi.js";
 import * as io from "socket.io-client";
 
-import { BaseCore, IPlayer, IInput, ILatency, ISnapshot, Direction, CreateBasePlayer, MessageQueue, Vector } from "./engine";
+import { BaseCore, IPlayer, IInput, IMessageQueue, ILatency, ISnapshot, Direction, CreateBasePlayer, MessageQueue, Vector } from "./engine";
 import { IKeyboad, createBox, createKey } from "./utils";
 
 class ClientGame extends BaseCore {
@@ -17,6 +17,7 @@ class ClientGame extends BaseCore {
     public gameElements: { [key: string]: any };
     public keyboard: { [direction: number]: IKeyboad };
     public fakeLatency: number;
+    public clientTime: number;
 
     private io: any;
 
@@ -42,6 +43,7 @@ class ClientGame extends BaseCore {
         this.clientPredict = false;
         this.serverReconciliation = false;
         this.showTickRate = false;
+        this.clientTime = 0;
         this.queue = new MessageQueue<ISnapshot>();
 
         this.createSocket();
@@ -99,28 +101,89 @@ class ClientGame extends BaseCore {
     }
 
     public processServerMessages(): void {
-        while (true) {
-            let snapshot: ISnapshot = this.queue.recv();
-            if (!snapshot) {
-                break;
+        let target: IMessageQueue<IPlayer> = this.queue.messages[1];
+        let previous: IMessageQueue<IPlayer> = this.queue.messages[0];
+
+        // console.log("Target: ", target);
+        // console.log("Previous: ", previous);
+
+        if (target && previous) {
+            // time diff between next target and last update from server
+            let difference: number = target.payload.time - this.clientTime;
+            // diff time between next pos and prev
+            let maxDifference: number = target.payload.time - previous.payload.time;
+            // time point for interpolation
+            let timePoint: number = difference / maxDifference;
+
+            if (isNaN(timePoint) || timePoint == -Infinity || timePoint == Infinity) {
+                timePoint = 0;
             }
-            for (let playerData of snapshot.online) {
-                if (this.players.hasOwnProperty(playerData.id)) {
-                    let player: IPlayer = this.players[playerData.id];
-                    if (this._isUserPlayer(player)) {
+
+            Object.keys(target.payload.players).forEach(uid => {
+                let prevPlayerData: IPlayer = target.payload.players[uid];
+                let player: IPlayer = this.players[prevPlayerData.id];
+                if (
+                    this.players.hasOwnProperty(prevPlayerData.id) &&
+                    !this._isUserPlayer(prevPlayerData)
+                ) {
+                    let targetPlayerData: IPlayer = previous.payload.players[uid];
+                    player.prevPos = Vector.copy(player.pos);
+                    player.pos = Vector.lerp(prevPlayerData.pos, targetPlayerData.pos, timePoint);
+                }
+            });
+            // for (let i in target.snapshot.online) {
+            //     let prevPlayerData: IPlayer = target.snapshot.online[i];
+            //     let targetPlayerData: IPlayer = previous.snapshot.online[i];
+            //     let player: IPlayer = this.players[prevPlayerData.id];
+            //     if (
+            //         this.players.hasOwnProperty(prevPlayerData.id) &&
+            //         !this._isUserPlayer(prevPlayerData)
+            //     ) {
+            //         player.pos = Vector.lerp(previous.prevPos, playerData.pos, 0.025);
+            //         player.prevPos = Vector.copy(player.pos);
+            //     }
+            // };
+        }
+        // while (true) {
+        //     let snapshot: ISnapshot = this.queue.recv();
+        //     if (!snapshot) {
+        //         break;
+        //     }
+        //     for (let playerData of snapshot.online) {
+        //         let player: IPlayer = this.players[playerData.id];
+        //         if (
+        //             this.players.hasOwnProperty(playerData.id) &&
+        //             !this._isUserPlayer(playerData)
+        //         ) {
+        //             player.pos = Vector.lerp(player.prevPos, playerData.pos, 0.025);
+        //             player.prevPos = Vector.copy(player.pos);
+        //         }
+        //     };
+        // }
+    }
+
+    public onServerUpdateReceive(snapshot: ISnapshot): void {
+        this.clientTime = snapshot.time - this.fakeLatency;
+        Object.keys(snapshot.players).forEach(uid => {
+            let playerData: IPlayer = snapshot.players[uid];
+            if (this.players.hasOwnProperty(playerData.id)) {
+                let player: IPlayer = this.players[playerData.id];
+                player.pos = playerData.pos;
+                if (this._isUserPlayer(player)) {
+                    if (this.serverReconciliation) {
                         this._playerPredictionCorrection(playerData);
                     } else {
-                        player.pos = Vector.lerp(player.prevPos, playerData.pos, 0.025);
-                        player.prevPos = Vector.copy(player.pos);
+                        this.player.inputs = [];
                     }
-                } else {
-                    this._createPlayer(playerData);
                 }
-            };
-            for (let playerData of snapshot.offline) {
-                this._removePlayer(this.players[playerData.id]);
+            } else {
+                this._createPlayer(playerData);
             }
+        });
+        for (let playerData of snapshot.offline) {
+            this._removePlayer(this.players[playerData.id]);
         }
+        this.queue.send(snapshot);
     }
 
     public handleInputs(): void {
@@ -160,23 +223,17 @@ class ClientGame extends BaseCore {
     }
 
     private _playerPredictionCorrection(playerData: IPlayer): void {
-        this.player.pos = playerData.pos;
-        if (this.serverReconciliation) {
-            let i: number = 0;
-            while (i < this.player.inputs.length) {
-                let input: IInput = this.player.inputs[i];
-                // if already processed from server, remove input
-                if (input.seq <= playerData.lastInputSeq) {
-                    this.player.inputs.splice(i, 1);
-                // reapply it, don't wait server response
-                } else {
-                    this.applyInput(this.player, input);
-                    i++;
-                }
+        let i: number = 0;
+        while (i < this.player.inputs.length) {
+            let input: IInput = this.player.inputs[i];
+            // if already processed from server, remove input
+            if (input.seq <= playerData.lastInputSeq) {
+                this.player.inputs.splice(i, 1);
+            // reapply it, don't wait server response
+            } else {
+                this.applyInput(this.player, input);
+                i++;
             }
-        } else {
-            // no prediction, wait for server
-            this.player.inputs = [];
         }
     }
 
@@ -221,9 +278,7 @@ class ClientGame extends BaseCore {
         this.io.on("registration", (player: IPlayer) => {
             this.player = this._createPlayer(player);
         });
-        this.io.on("mapUpdate", (snapshot: ISnapshot) => {
-            this.queue.send(snapshot);
-        });
+        this.io.on("mapUpdate", this.onServerUpdateReceive.bind(this));
         this.io.on("optionsUpdate", (data: any) => {
             let tpsInput: any = document.querySelector('input#tps');
             tpsInput.value = data.TPS;
