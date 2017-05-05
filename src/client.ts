@@ -44,7 +44,7 @@ class ClientGame extends BaseCore {
         this.serverReconciliation = false;
         this.showTickRate = false;
         this.clientTime = 0;
-        this.queue = new MessageQueue<ISnapshot>();
+        this.queue = new MessageQueue<ISnapshot>(0, 4);
 
         this.createSocket();
         this.create();
@@ -103,8 +103,8 @@ class ClientGame extends BaseCore {
     public processServerMessages(): void {
         if (!this.queue.length) return;
 
-        let target: IMessageQueue<ISnapshot> = this.queue.messages[this.queue.length - 1];
         let previous: IMessageQueue<ISnapshot> = this.queue.messages[this.queue.length - 2];
+        let target: IMessageQueue<ISnapshot> = this.queue.messages[this.queue.length - 1];
 
         // console.log("Target: ", target);
         // console.log("Previous: ", previous);
@@ -130,9 +130,9 @@ class ClientGame extends BaseCore {
                 ) {
                     let targetPlayerData: IPlayer = previous.payload.players[uid];
                     player.prevPos = Vector.copy(player.pos);
-                    console.log(maxDifference / 1000);
-                    let pos: IVector = Vector.lerp(prevPlayerData.pos, targetPlayerData.pos, 1);
-                    player.pos = Vector.lerp(player.pos, pos, 0.012);
+                    player.pos = Vector.lerp(player.pos, targetPlayerData.pos, maxDifference / 1000);
+                    console.log("Player pos: ", player.pos);
+                    console.log("Target pos: ", targetPlayerData.pos);
                 }
             });
         }
@@ -144,8 +144,8 @@ class ClientGame extends BaseCore {
             let playerData: IPlayer = snapshot.players[uid];
             if (this.players.hasOwnProperty(playerData.id)) {
                 let player: IPlayer = this.players[playerData.id];
-                player.pos = playerData.pos;
                 if (this._isUserPlayer(player)) {
+                    player.pos = playerData.pos;
                     if (this.serverReconciliation) {
                         this._playerPredictionCorrection(playerData);
                     } else {
