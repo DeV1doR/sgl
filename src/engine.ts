@@ -85,7 +85,7 @@ export class Vector implements IVector {
     }
 }
 
-class IMessageQueue<T> {
+export class IMessageQueue<T> {
     recvTs: number;
     payload: T;
 }
@@ -94,7 +94,7 @@ export class MessageQueue<T> {
 
     public messages: IMessageQueue<T>[];
 
-    constructor(public timeDelay: number = 0, public bufferSize: number = 100) {
+    constructor(public timeDelay: number = 0, public bufferSize: number = 2 * 60) {
         this.messages = [];
     }
 

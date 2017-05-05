@@ -1,7 +1,7 @@
 import * as PIXI from "pixi.js";
 import * as io from "socket.io-client";
 
-import { BaseCore, IPlayer, IInput, IMessageQueue, ILatency, ISnapshot, Direction, CreateBasePlayer, MessageQueue, Vector } from "./engine";
+import { BaseCore, IPlayer, IInput, IMessageQueue, ILatency, ISnapshot, IVector, Direction, CreateBasePlayer, MessageQueue, Vector } from "./engine";
 import { IKeyboad, createBox, createKey } from "./utils";
 
 class ClientGame extends BaseCore {
@@ -101,8 +101,10 @@ class ClientGame extends BaseCore {
     }
 
     public processServerMessages(): void {
-        let target: IMessageQueue<IPlayer> = this.queue.messages[1];
-        let previous: IMessageQueue<IPlayer> = this.queue.messages[0];
+        if (!this.queue.length) return;
+
+        let target: IMessageQueue<ISnapshot> = this.queue.messages[this.queue.length - 1];
+        let previous: IMessageQueue<ISnapshot> = this.queue.messages[this.queue.length - 2];
 
         // console.log("Target: ", target);
         // console.log("Previous: ", previous);
@@ -128,38 +130,12 @@ class ClientGame extends BaseCore {
                 ) {
                     let targetPlayerData: IPlayer = previous.payload.players[uid];
                     player.prevPos = Vector.copy(player.pos);
-                    player.pos = Vector.lerp(prevPlayerData.pos, targetPlayerData.pos, timePoint);
+                    console.log(maxDifference / 1000);
+                    let pos: IVector = Vector.lerp(prevPlayerData.pos, targetPlayerData.pos, 1);
+                    player.pos = Vector.lerp(player.pos, pos, 0.012);
                 }
             });
-            // for (let i in target.snapshot.online) {
-            //     let prevPlayerData: IPlayer = target.snapshot.online[i];
-            //     let targetPlayerData: IPlayer = previous.snapshot.online[i];
-            //     let player: IPlayer = this.players[prevPlayerData.id];
-            //     if (
-            //         this.players.hasOwnProperty(prevPlayerData.id) &&
-            //         !this._isUserPlayer(prevPlayerData)
-            //     ) {
-            //         player.pos = Vector.lerp(previous.prevPos, playerData.pos, 0.025);
-            //         player.prevPos = Vector.copy(player.pos);
-            //     }
-            // };
         }
-        // while (true) {
-        //     let snapshot: ISnapshot = this.queue.recv();
-        //     if (!snapshot) {
-        //         break;
-        //     }
-        //     for (let playerData of snapshot.online) {
-        //         let player: IPlayer = this.players[playerData.id];
-        //         if (
-        //             this.players.hasOwnProperty(playerData.id) &&
-        //             !this._isUserPlayer(playerData)
-        //         ) {
-        //             player.pos = Vector.lerp(player.prevPos, playerData.pos, 0.025);
-        //             player.prevPos = Vector.copy(player.pos);
-        //         }
-        //     };
-        // }
     }
 
     public onServerUpdateReceive(snapshot: ISnapshot): void {
