@@ -46,7 +46,7 @@ class ClientGame extends BaseCore {
         this.clientInterpolation = false;
         this.showTickRate = false;
         this.clientTime = 0;
-        this.queue = new MessageQueue<ISnapshot>(0, this.frameTime);
+        this.queue = new MessageQueue<ISnapshot>(0, this.frameTime * 2);
 
         this.createSocket();
         this.create();
@@ -134,27 +134,27 @@ class ClientGame extends BaseCore {
 
         if (target && previous) {
             // time diff between next target and last update from server
-            let difference: number = Math.abs(target.time - this.clientTime) / 1000;
-            // diff time between next pos and prev
-            let maxDifference: number = (target.time - previous.time) / 1000;
+            // let difference: number = Date.now() - target.time;
             // time point for interpolation
-            let timePoint: number = difference / maxDifference;
+            // let timePoint: number = difference / 16.667;
 
-            if (isNaN(timePoint) || timePoint == -Infinity || timePoint == Infinity) {
-                timePoint = 0;
-            }
+            // console.log(timePoint);
+
+            // if (isNaN(timePoint) || timePoint == -Infinity || timePoint == Infinity) {
+            //     timePoint = 0;
+            // }
 
             Object.keys(target.players).forEach(uid => {
-                let prevPlayerData: IPlayer = target.players[uid];
+                let prevPlayerData: IPlayer = previous.players[uid];
                 let player: IPlayer = this.players[prevPlayerData.id];
                 if (
                     this.players.hasOwnProperty(prevPlayerData.id) &&
                     !this._isUserPlayer(prevPlayerData)
                 ) {
-                    let targetPlayerData: IPlayer = previous.players[uid];
+                    let targetPlayerData: IPlayer = target.players[uid];
                     if (this.clientInterpolation) {
                         player.prevPos = Vector.copy(player.pos);
-                        player.pos = Vector.lerp(player.pos, targetPlayerData.pos, 0.2);
+                        player.pos = Vector.lerp(player.pos, targetPlayerData.pos, 0.1);
                     } else {
                         player.prevPos = Vector.copy(player.pos);
                         player.pos = targetPlayerData.pos;
