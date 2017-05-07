@@ -33,7 +33,7 @@ class ServerEngine extends BaseCore {
     constructor(frameTime: number) {
         super(frameTime);
         this.uid = 0;
-        this.queue = new MessageQueue<IInput>();
+        this.queue = new MessageQueue<IInput>(0, this.frameTime);
         this.players = {};
         this.offline = {};
         this.fakeLatency = 0;

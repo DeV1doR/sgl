@@ -78,6 +78,7 @@ export class Vector implements IVector {
     }
 
     public static lerp(v1: IVector, v2: IVector, t: number): IVector {
+        t = Math.max(0, Math.min(1, t));
         return <IVector>{
             x: parseInt((v1.x + t * (v2.x - v1.x)).toFixed()),
             y: parseInt((v1.y + t * (v2.y - v1.y)).toFixed()),
@@ -94,7 +95,7 @@ export class MessageQueue<T> {
 
     public messages: IMessageQueue<T>[];
 
-    constructor(public timeDelay: number = 0, public bufferSize: number = 2 * 60) {
+    constructor(public timeDelay: number = 0, public bufferSize: number) {
         this.messages = [];
     }
 
@@ -115,16 +116,26 @@ export class MessageQueue<T> {
         if (typeof message !== "undefined") {
             return message.payload;
         }
-        // else {
-        //     let now: number = Date.now();
-        //     for (let i in this.messages) {
-        //         let message = this.messages[i];
-        //         if (message.recvTs <= now) {
-        //             this.messages.splice(parseInt(i), 1);
-        //             return message.payload;
-        //         }
-        //     }
-        // }
+        else {
+            let now: number = Date.now();
+            for (let i in this.messages) {
+                let message = this.messages[i];
+                if (message.recvTs <= now) {
+                    this.messages.splice(parseInt(i), 1);
+                    return message.payload;
+                }
+            }
+        }
+    }
+
+    public get(index: number): T {
+        if (index < 0) {
+            index = this.messages.length + index;
+        }
+        let message: IMessageQueue<T> = this.messages[index];
+        if (typeof message !== "undefined") {
+            return message.payload;
+        }
     }
 
     public get length(): number {

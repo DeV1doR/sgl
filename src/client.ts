@@ -14,6 +14,7 @@ class ClientGame extends BaseCore {
     public players: {[id: string]: IPlayer};
     public clientPredict: boolean;
     public serverReconciliation: boolean;
+    public clientInterpolation: boolean;
     public gameElements: { [key: string]: any };
     public keyboard: { [direction: number]: IKeyboad };
     public fakeLatency: number;
@@ -42,9 +43,10 @@ class ClientGame extends BaseCore {
         this.gameElements = {};
         this.clientPredict = false;
         this.serverReconciliation = false;
+        this.clientInterpolation = false;
         this.showTickRate = false;
         this.clientTime = 0;
-        this.queue = new MessageQueue<ISnapshot>(0, 4);
+        this.queue = new MessageQueue<ISnapshot>(0, this.frameTime);
 
         this.createSocket();
         this.create();
@@ -79,6 +81,9 @@ class ClientGame extends BaseCore {
         document.querySelector("#server-reconciliation").addEventListener("click", (event: any) => {
             this.serverReconciliation = (this.serverReconciliation) ? false: true;
         });
+        document.querySelector("#interpolation").addEventListener("click", (event: any) => {
+            this.clientInterpolation = (this.clientInterpolation) ? false: true;
+        });
         document.querySelector("#extrapolation").addEventListener("click", (event: any) => {
             // TODO
         });
@@ -103,36 +108,37 @@ class ClientGame extends BaseCore {
     public processServerMessages(): void {
         if (!this.queue.length) return;
 
-        let previous: IMessageQueue<ISnapshot> = this.queue.messages[this.queue.length - 2];
-        let target: IMessageQueue<ISnapshot> = this.queue.messages[this.queue.length - 1];
-
-        // console.log("Target: ", target);
-        // console.log("Previous: ", previous);
+        let previous: ISnapshot = this.queue.get(-2);
+        let target: ISnapshot = this.queue.get(-1);
 
         if (target && previous) {
-            // time diff between next target and last update from server
-            let difference: number = target.payload.time - this.clientTime;
             // diff time between next pos and prev
-            let maxDifference: number = target.payload.time - previous.payload.time;
+            let maxDifference: number = target.time - previous.time;
             // time point for interpolation
-            let timePoint: number = difference / maxDifference;
+            let timePoint: number = maxDifference / 1000;
 
             if (isNaN(timePoint) || timePoint == -Infinity || timePoint == Infinity) {
                 timePoint = 0;
             }
 
-            Object.keys(target.payload.players).forEach(uid => {
-                let prevPlayerData: IPlayer = target.payload.players[uid];
+            Object.keys(target.players).forEach(uid => {
+                let prevPlayerData: IPlayer = target.players[uid];
                 let player: IPlayer = this.players[prevPlayerData.id];
                 if (
                     this.players.hasOwnProperty(prevPlayerData.id) &&
                     !this._isUserPlayer(prevPlayerData)
                 ) {
-                    let targetPlayerData: IPlayer = previous.payload.players[uid];
-                    player.prevPos = Vector.copy(player.pos);
-                    player.pos = Vector.lerp(player.pos, targetPlayerData.pos, maxDifference / 1000);
-                    console.log("Player pos: ", player.pos);
-                    console.log("Target pos: ", targetPlayerData.pos);
+                    let targetPlayerData: IPlayer = previous.players[uid];
+                    if (this.clientInterpolation) {
+                        player.prevPos = Vector.copy(player.pos);
+                        player.pos = Vector.lerp(player.pos, targetPlayerData.pos, timePoint);
+                        console.log("TimePoint: ", timePoint);
+                        console.log("Player pos: ", player.pos);
+                        console.log("Target pos: ", targetPlayerData.pos);
+                    } else {
+                        player.prevPos = Vector.copy(player.pos);
+                        player.pos = targetPlayerData.pos;
+                    }
                 }
             });
         }
