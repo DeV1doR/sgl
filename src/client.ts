@@ -108,14 +108,37 @@ class ClientGame extends BaseCore {
     public processServerMessages(): void {
         if (!this.queue.length) return;
 
-        let previous: ISnapshot = this.queue.get(-2);
-        let target: ISnapshot = this.queue.get(-1);
+        let previous: ISnapshot = null;
+        let target: ISnapshot = null;
+
+
+        for (let i in this.queue.messages) {
+            let point: ISnapshot = this.queue.get(parseInt(i));
+            let nextPoint: ISnapshot = this.queue.get(parseInt(i) + 1);
+
+            if (!point || !nextPoint) {
+                continue;
+            }
+
+            if (this.clientTime > point.time && this.clientTime < nextPoint.time) {
+                previous = point;
+                target = nextPoint;
+                break;
+            }
+        }
+
+        if (!target) {
+            previous = this.queue.get(-1);
+            target = this.queue.get(-1);
+        }
 
         if (target && previous) {
+            // time diff between next target and last update from server
+            let difference: number = Math.abs(target.time - this.clientTime) / 1000;
             // diff time between next pos and prev
-            let maxDifference: number = target.time - previous.time;
+            let maxDifference: number = (target.time - previous.time) / 1000;
             // time point for interpolation
-            let timePoint: number = maxDifference / 1000;
+            let timePoint: number = difference / maxDifference;
 
             if (isNaN(timePoint) || timePoint == -Infinity || timePoint == Infinity) {
                 timePoint = 0;
@@ -131,10 +154,7 @@ class ClientGame extends BaseCore {
                     let targetPlayerData: IPlayer = previous.players[uid];
                     if (this.clientInterpolation) {
                         player.prevPos = Vector.copy(player.pos);
-                        player.pos = Vector.lerp(player.pos, targetPlayerData.pos, timePoint);
-                        console.log("TimePoint: ", timePoint);
-                        console.log("Player pos: ", player.pos);
-                        console.log("Target pos: ", targetPlayerData.pos);
+                        player.pos = Vector.lerp(player.pos, targetPlayerData.pos, 0.2);
                     } else {
                         player.prevPos = Vector.copy(player.pos);
                         player.pos = targetPlayerData.pos;
@@ -145,7 +165,7 @@ class ClientGame extends BaseCore {
     }
 
     public onServerUpdateReceive(snapshot: ISnapshot): void {
-        this.clientTime = snapshot.time - this.fakeLatency;
+        this.clientTime = Date.now() - this.fakeLatency;
         Object.keys(snapshot.players).forEach(uid => {
             let playerData: IPlayer = snapshot.players[uid];
             if (this.players.hasOwnProperty(playerData.id)) {
